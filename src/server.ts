@@ -67,6 +67,14 @@ onMessage(async (msg) => {
 
 const port = Number(process.env.PORT || 3000);
 
+if (process.env.USE_WA === "true") {
+  initWA().then(() =>
+    app.listen(port, "0.0.0.0", () => console.log("HTTP on", port))
+  );
+} else {
+  app.listen(port, "0.0.0.0", () => console.log("HTTP on", port));
+}
+
 // Garante que o WhatsApp inicia antes de abrir HTTP
 initWA()
   .then(() => {
