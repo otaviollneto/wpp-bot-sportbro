@@ -6,18 +6,6 @@ const dataPath = process.env.WAWEB_SESSION_DIR || ".wa-session";
 const WEB_VERSION = process.env.WWEBJS_WEB_VERSION || undefined;
 const WEB_VERSION_CACHE: any = WEB_VERSION ? { type: "none" } : undefined;
 
-export const client = new Client({
-  authStrategy: new LocalAuth({ dataPath, clientId: "default" }),
-  puppeteer: {
-    headless: true,
-    executablePath: puppeteer.executablePath(),
-    args: ["--no-sandbox", "--disable-setuid-sandbox"],
-  },
-  ...(WEB_VERSION ? { webVersion: WEB_VERSION } : {}),
-  ...(WEB_VERSION_CACHE ? { webVersionCache: WEB_VERSION_CACHE } : {}),
-});
-
-let lastQRDataUrl: string | null = null;
 type WaStatus =
   | "INIT"
   | "NEEDS_QR"
@@ -25,23 +13,60 @@ type WaStatus =
   | "AUTH_FAIL"
   | "DISCONNECTED"
   | "LOADING";
+
+let lastQRDataUrl: string | null = null;
 let waStatus: WaStatus = "INIT";
 let initialized = false;
 
+function resolveChromePath(): string | undefined {
+  // Prioriza variáveis que o buildpack chrome-for-testing injeta
+  return (
+    process.env.PUPPETEER_EXECUTABLE_PATH ||
+    process.env.GOOGLE_CHROME_FOR_TESTING_BIN ||
+    process.env.CHROME_BIN ||
+    process.env.CHROME_PATH ||
+    puppeteer.executablePath()
+  );
+}
+
+function puppeteerOptions() {
+  return {
+    headless: true,
+    executablePath: resolveChromePath(),
+    args: [
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-dev-shm-usage",
+      "--disable-accelerated-2d-canvas",
+      "--no-first-run",
+      "--no-zygote",
+      "--disable-gpu",
+      // evita problemas de IPC em ambientes limitados
+      "--single-process",
+    ],
+  };
+}
+
+export const client = new Client({
+  authStrategy: new LocalAuth({ dataPath, clientId: "default" }),
+  puppeteer: puppeteerOptions(),
+  ...(WEB_VERSION ? { webVersion: WEB_VERSION } : {}),
+  ...(WEB_VERSION_CACHE ? { webVersionCache: WEB_VERSION_CACHE } : {}),
+});
+
 export function getQR() {
-  // agora você sabe se precisa exibir o QR ou não
   return { status: waStatus, dataUrl: lastQRDataUrl };
 }
 
 export async function initWA() {
-  if (initialized) return; // evita múltiplas inicializações
+  if (initialized) return;
   initialized = true;
 
   client.on("qr", async (qr) => {
     try {
       lastQRDataUrl = await QRCode.toDataURL(qr);
       waStatus = "NEEDS_QR";
-      console.log("[WA] QR atualizado");
+      console.log("[WA] QR atualizado (escaneie para autenticar).");
     } catch (e) {
       console.error("[WA] erro ao gerar QR:", e);
     }
@@ -50,18 +75,21 @@ export async function initWA() {
   client.on("ready", () => {
     waStatus = "READY";
     console.log("[WA] pronto");
-    // NÃO zere lastQRDataUrl aqui. Deixe para o cliente decidir se usa.
   });
 
   client.on("loading_screen", (percent, message) => {
     waStatus = "LOADING";
     console.log("[WA] loading:", percent, message);
   });
+
   client.on("change_state", (s) => console.log("[WA] state:", s));
+
   client.on("disconnected", (r) => {
     waStatus = "DISCONNECTED";
-    console.log("[WA] desconectado:", r);
+    lastQRDataUrl = null;
+    console.warn("[WA] desconectado:", r);
   });
+
   client.on("auth_failure", (m) => {
     waStatus = "AUTH_FAIL";
     console.error("[WA] auth_failure:", m);
