@@ -1,23 +1,16 @@
 import { Client, LocalAuth, MessageMedia, Message } from "whatsapp-web.js";
 import QRCode from "qrcode";
-import puppeteer from "puppeteer";
 
+/** =========================
+ *  Config (.env)
+ * ========================= */
 const dataPath = process.env.WAWEB_SESSION_DIR || ".wa-session";
 const WEB_VERSION = process.env.WWEBJS_WEB_VERSION || undefined;
 const WEB_VERSION_CACHE: any = WEB_VERSION ? { type: "none" } : undefined;
 
-export const client = new Client({
-  authStrategy: new LocalAuth({ dataPath, clientId: "default" }),
-  puppeteer: {
-    headless: true,
-    executablePath: puppeteer.executablePath(),
-    args: ["--no-sandbox", "--disable-setuid-sandbox"],
-  },
-  ...(WEB_VERSION ? { webVersion: WEB_VERSION } : {}),
-  ...(WEB_VERSION_CACHE ? { webVersionCache: WEB_VERSION_CACHE } : {}),
-});
-
-let lastQRDataUrl: string | null = null;
+/** =========================
+ *  Status / QR em memória
+ * ========================= */
 type WaStatus =
   | "INIT"
   | "NEEDS_QR"
@@ -25,23 +18,69 @@ type WaStatus =
   | "AUTH_FAIL"
   | "DISCONNECTED"
   | "LOADING";
+
+let lastQRDataUrl: string | null = null;
 let waStatus: WaStatus = "INIT";
+
+/** =========================
+ *  Client (preenchido no init)
+ * ========================= */
+export let client: Client;
 let initialized = false;
 
 export function getQR() {
-  // agora você sabe se precisa exibir o QR ou não
   return { status: waStatus, dataUrl: lastQRDataUrl };
 }
 
+/** =========================
+ *  Chrome no Heroku (flags)
+ * ========================= */
+function guessChromeExecutablePath(): string | undefined {
+  // 1) se o buildpack exporta isso, use
+  if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+    return process.env.PUPPETEER_EXECUTABLE_PATH;
+  }
+  // 2) caminhos comuns em buildpacks
+  const guesses = ["/app/.apt/usr/bin/google-chrome", "/usr/bin/google-chrome"];
+  for (const p of guesses) return p;
+  return undefined; // deixa o puppeteer escolher
+}
+
+function puppeteerConfig(): any {
+  return {
+    headless: true,
+    executablePath: guessChromeExecutablePath(),
+    args: [
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-dev-shm-usage",
+      "--disable-gpu",
+      "--no-first-run",
+      "--no-zygote",
+      "--single-process",
+    ],
+  };
+}
+
+/** =========================
+ *  Inicialização com retry
+ * ========================= */
 export async function initWA() {
-  if (initialized) return; // evita múltiplas inicializações
+  if (initialized) return;
   initialized = true;
+
+  client = new Client({
+    authStrategy: new LocalAuth({ dataPath, clientId: "default" }),
+    puppeteer: puppeteerConfig(),
+    ...(WEB_VERSION ? { webVersion: WEB_VERSION } : {}),
+    ...(WEB_VERSION_CACHE ? { webVersionCache: WEB_VERSION_CACHE } : {}),
+  });
 
   client.on("qr", async (qr) => {
     try {
       lastQRDataUrl = await QRCode.toDataURL(qr);
       waStatus = "NEEDS_QR";
-      console.log("[WA] QR atualizado");
+      console.log("[WA] QR atualizado — escaneie no app para autenticar.");
     } catch (e) {
       console.error("[WA] erro ao gerar QR:", e);
     }
@@ -50,18 +89,21 @@ export async function initWA() {
   client.on("ready", () => {
     waStatus = "READY";
     console.log("[WA] pronto");
-    // NÃO zere lastQRDataUrl aqui. Deixe para o cliente decidir se usa.
   });
 
   client.on("loading_screen", (percent, message) => {
     waStatus = "LOADING";
     console.log("[WA] loading:", percent, message);
   });
+
   client.on("change_state", (s) => console.log("[WA] state:", s));
-  client.on("disconnected", (r) => {
+
+  client.on("disconnected", (reason) => {
     waStatus = "DISCONNECTED";
-    console.log("[WA] desconectado:", r);
+    lastQRDataUrl = null; // força novo QR numa próxima inicialização
+    console.warn("[WA] desconectado:", reason);
   });
+
   client.on("auth_failure", (m) => {
     waStatus = "AUTH_FAIL";
     console.error("[WA] auth_failure:", m);
@@ -83,6 +125,7 @@ async function initializeWithRetry(maxAttempts = 3) {
         msg.includes("Execution context was destroyed") ||
         msg.includes("Most likely because of a navigation") ||
         msg.includes("Cannot read properties of null");
+
       if (isNavErr && attempt < maxAttempts) {
         console.warn(
           `[WA] initialize falhou por navegação (tentativa ${attempt}/${maxAttempts}) — retry em 1.5s...`
@@ -97,7 +140,11 @@ async function initializeWithRetry(maxAttempts = 3) {
   throw new Error("Falha ao inicializar o WhatsApp após múltiplas tentativas.");
 }
 
+/** =========================
+ *  Envio de mensagens
+ * ========================= */
 async function ensureJid(toE164: string) {
+  if (!client) throw new Error("WhatsApp Client não inicializado");
   const number = (toE164 || "").replace(/\D/g, "");
   if (!number) throw new Error("Número não informado");
   const jid = await client.getNumberId(number);
@@ -125,7 +172,11 @@ export async function sendImageBase64(
   return client.sendMessage(jid, media, { caption });
 }
 
+/** =========================
+ *  Registro de handlers
+ * ========================= */
 export type OnMessageHandler = (msg: Message) => void;
+
 export function onMessage(h: OnMessageHandler) {
-  client.on("message", h);
+  client?.on("message", h);
 }
