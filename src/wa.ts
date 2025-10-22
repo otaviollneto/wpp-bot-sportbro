@@ -36,14 +36,28 @@ export function getQR() {
  *  Chrome no Heroku (flags)
  * ========================= */
 function guessChromeExecutablePath(): string | undefined {
-  // 1) se o buildpack exporta isso, use
-  if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+  // Prioridades (várias plataformas/setups):
+  // 1) explicitamente informado
+  if (process.env.PUPPETEER_EXECUTABLE_PATH)
     return process.env.PUPPETEER_EXECUTABLE_PATH;
-  }
-  // 2) caminhos comuns em buildpacks
-  const guesses = ["/app/.apt/usr/bin/google-chrome", "/usr/bin/google-chrome"];
+
+  // 2) novo buildpack oficial do Heroku (chrome-for-testing)
+  if (process.env.GOOGLE_CHROME_FOR_TESTING_BIN)
+    return process.env.GOOGLE_CHROME_FOR_TESTING_BIN;
+
+  // 3) variáveis tradicionais usadas por outros buildpacks
+  if (process.env.CHROME_BIN) return process.env.CHROME_BIN;
+  if (process.env.CHROME_PATH) return process.env.CHROME_PATH;
+
+  // 4) caminhos comuns em containers/Heroku layers
+  const guesses = [
+    "/app/.cache/chrome-for-testing/chrome",
+    "/app/.apt/usr/bin/google-chrome",
+    "/usr/bin/google-chrome",
+  ];
   for (const p of guesses) return p;
-  return undefined; // deixa o puppeteer escolher
+
+  return undefined; // deixa o puppeteer resolver (quando aplicável)
 }
 
 function puppeteerConfig(): any {
