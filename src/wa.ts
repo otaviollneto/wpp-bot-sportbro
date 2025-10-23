@@ -6,47 +6,22 @@ const dataPath = process.env.WAWEB_SESSION_DIR || ".wa-session";
 const WEB_VERSION = process.env.WWEBJS_WEB_VERSION || undefined;
 const WEB_VERSION_CACHE: any = WEB_VERSION ? { type: "none" } : undefined;
 
-/** Resolve o binário do Chrome no Heroku (buildpack chrome-for-testing) ou em outras plataformas */
-function resolveChromePath(): string | undefined {
-  // 1) Se você quiser sobrepor manualmente:
-  if (process.env.PUPPETEER_EXECUTABLE_PATH)
-    return process.env.PUPPETEER_EXECUTABLE_PATH;
-
-  // 2) Variáveis que os buildpacks costumam expor
-  if (process.env.CHROME_PATH) return process.env.CHROME_PATH; // heroku-buildpack-chrome-for-testing
-  if (process.env.GOOGLE_CHROME_BIN) return process.env.GOOGLE_CHROME_BIN; // compat com buildpacks antigos
-
-  // 3) Palpites comuns (nem sempre necessários)
-  const guesses = ["/usr/bin/google-chrome", "/app/.apt/usr/bin/google-chrome"];
-  return guesses.find(Boolean);
-}
-
-/** Flags seguras para ambiente de container/dyno */
-function puppeteerOptions() {
-  const executablePath = resolveChromePath();
-
-  // Precisa ser um array mutável (nada de "as const")
-  const args: string[] = [
-    "--no-sandbox",
-    "--disable-setuid-sandbox",
-    "--disable-dev-shm-usage",
-    "--no-first-run",
-    "--no-zygote",
-    "--disable-gpu",
-    "--single-process",
-    "--disable-software-rasterizer",
-  ];
-
-  return {
-    headless: true, // no Heroku, true funciona bem
-    executablePath, // deve apontar p/ /usr/bin/google-chrome
-    args,
-  };
-}
-
 export const client = new Client({
   authStrategy: new LocalAuth({ dataPath, clientId: "default" }),
-  puppeteer: puppeteerOptions(),
+  puppeteer: {
+    headless: true,
+    // usa o Chromium baixado pelo puppeteer
+    executablePath: process.env.CHROME_PATH || puppeteer.executablePath(),
+    args: [
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-dev-shm-usage",
+      "--no-first-run",
+      "--no-zygote",
+      "--single-process",
+      "--disable-gpu",
+    ],
+  },
   ...(WEB_VERSION ? { webVersion: WEB_VERSION } : {}),
   ...(WEB_VERSION_CACHE ? { webVersionCache: WEB_VERSION_CACHE } : {}),
 });
@@ -63,11 +38,12 @@ let waStatus: WaStatus = "INIT";
 let initialized = false;
 
 export function getQR() {
+  // agora você sabe se precisa exibir o QR ou não
   return { status: waStatus, dataUrl: lastQRDataUrl };
 }
 
 export async function initWA() {
-  if (initialized) return;
+  if (initialized) return; // evita múltiplas inicializações
   initialized = true;
 
   client.on("qr", async (qr) => {
@@ -83,20 +59,18 @@ export async function initWA() {
   client.on("ready", () => {
     waStatus = "READY";
     console.log("[WA] pronto");
+    // NÃO zere lastQRDataUrl aqui. Deixe para o cliente decidir se usa.
   });
 
   client.on("loading_screen", (percent, message) => {
     waStatus = "LOADING";
     console.log("[WA] loading:", percent, message);
   });
-
   client.on("change_state", (s) => console.log("[WA] state:", s));
-
   client.on("disconnected", (r) => {
     waStatus = "DISCONNECTED";
-    console.warn("[WA] desconectado:", r);
+    console.log("[WA] desconectado:", r);
   });
-
   client.on("auth_failure", (m) => {
     waStatus = "AUTH_FAIL";
     console.error("[WA] auth_failure:", m);
@@ -120,7 +94,7 @@ async function initializeWithRetry(maxAttempts = 3) {
         msg.includes("Cannot read properties of null");
       if (isNavErr && attempt < maxAttempts) {
         console.warn(
-          `[WA] initialize falhou (tentativa ${attempt}/${maxAttempts}) — retry em 1.5s...`
+          `[WA] initialize falhou por navegação (tentativa ${attempt}/${maxAttempts}) — retry em 1.5s...`
         );
         await new Promise((r) => setTimeout(r, 1500));
         continue;

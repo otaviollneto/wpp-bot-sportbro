@@ -1,12 +1,6 @@
 import { sendText } from "../wa";
 import { Session } from "../type";
-import {
-  fetchJSON,
-  friendly,
-  norm,
-  aiSelectFromList,
-  clearEventContext,
-} from "../helpers";
+import { fetchJSON, friendly, norm, aiSelectFromList } from "../helpers";
 
 export async function askCategoryOptions(to: string, sess: Session) {
   if (!sess.event?.id || !sess.user?.id) {
