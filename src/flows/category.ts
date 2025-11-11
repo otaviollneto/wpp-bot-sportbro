@@ -1,6 +1,7 @@
+// src/flows/category.ts
 import { sendText } from "../wa";
 import { Session } from "../type";
-import { fetchJSON, friendly, norm, aiSelectFromList } from "../helpers";
+import { fetchJSON, friendly, norm, chooseIndexByText } from "../helpers";
 
 export async function askCategoryOptions(to: string, sess: Session) {
   if (!sess.event?.id || !sess.user?.id) {
@@ -39,9 +40,7 @@ export async function askCategoryOptions(to: string, sess: Session) {
       categoryOptions: categorias,
     };
 
-    let menu =
-      `Evento selecionado: **${sess.event.title}**\n` +
-      "Escolha a **nova categoria**:\n\n";
+    let menu = `Evento selecionado: **${sess.event.title}**\nEscolha a **nova categoria**:\n\n`;
     categorias.forEach((c: any, i: number) => {
       const n = i + 1;
       const valor = c.valor_formatado ? ` — R$ ${c.valor_formatado}` : "";
@@ -118,18 +117,10 @@ export async function handleCategoryFreeText(
   lista: any[]
 ): Promise<number> {
   const q = norm(raw);
+  if (!q || !lista?.length) return -1;
+
   const tokens = q.split(/\s+/).filter(Boolean);
-
-  const idxAI = await aiSelectFromList(raw, lista, (c: any) => {
-    const tit = String(c.titulo || "");
-    const desc = String(c.descricao || "");
-    const val = c.valor_formatado ? ` R$ ${c.valor_formatado}` : "";
-    const tax = c.taxa_formatado ? ` taxa R$ ${c.taxa_formatado}` : "";
-    return `${tit} ${desc}${val}${tax}`;
-  });
-  if (idxAI >= 0) return idxAI;
-
-  const pickIndex = lista.findIndex((c: any) => {
+  const idxStrict = lista.findIndex((c: any) => {
     const hay = norm(
       [
         c.titulo || "",
@@ -140,6 +131,12 @@ export async function handleCategoryFreeText(
     );
     return tokens.every((tk) => hay.includes(tk));
   });
+  if (idxStrict >= 0) return idxStrict;
 
-  return pickIndex;
+  const idxFuzzy = chooseIndexByText(raw, lista, (c: any) => {
+    const v = c.valor_formatado ? ` R$ ${c.valor_formatado}` : "";
+    const t = c.taxa_formatado ? ` taxa R$ ${c.taxa_formatado}` : "";
+    return `${c.titulo || ""} ${c.descricao || ""}${v}${t}`;
+  });
+  return idxFuzzy;
 }

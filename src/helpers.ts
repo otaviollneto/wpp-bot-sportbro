@@ -57,7 +57,7 @@ Responda apenas com a chave. Texto: "${text}"
     ]);
     return allowed.has(key) ? (key as any) : "unknown";
   } catch {
-    // Fallback por palavras‑chave
+    // Fallback por palavras-chave
     const t = norm(text);
     if (t.includes("senha")) return "iss_pwd";
     if (t.includes("categoria")) return "iss_cat";
@@ -71,7 +71,6 @@ Responda apenas com a chave. Texto: "${text}"
 
 export function isSwitchEvent(s: string) {
   const t = norm(` ${s} `);
-  // palavras e variações comuns
   const keys = [
     " trocar ",
     " troca ",
@@ -88,7 +87,6 @@ export function isSwitchEvent(s: string) {
     " trocar o evento ",
     " selecionar outro evento ",
   ];
-  // aceita também o atalho "0"
   return t.trim() === "0" || keys.some((k) => t.includes(k));
 }
 
@@ -107,68 +105,83 @@ export function isGoMenu(s: string) {
   ].some((k) => t.includes(k));
 }
 
-// 2) Selecionar item por texto (ex.: evento pelo título). Usa LLM + fallback fuzzy local.
-export async function aiSelectFromList<T>(
-  userText: string,
-  items: T[],
-  getLabel: (item: T) => string
-): Promise<number> {
-  if (!items?.length) return -1;
+// ======= Novas funções de interpretação pós-atendimento =======
 
-  // Monte uma lista curta de labels para o LLM decidir
-  const labels = items.map((x, i) => `${i + 1}. ${getLabel(x)}`).join("\n");
-  const prompt = `
-Você deve escolher o ÍNDICE (1..N) do item que melhor corresponde ao pedido do usuário, ou 0 se nenhum.
-Responda APENAS com um número inteiro.
-Lista:
-${labels}
-
-Pedido do usuário: "${userText}"
-`;
-
-  try {
-    const r = await openai.chat.completions.create({
-      model: MODEL,
-      temperature: 0,
-      messages: [
-        {
-          role: "system",
-          content:
-            "Responda apenas com um número inteiro (0..N). Nenhum outro texto.",
-        },
-        { role: "user", content: prompt },
-      ],
-    });
-    const raw = (r.choices[0]?.message?.content || "").trim();
-    const n = Number(raw);
-    if (Number.isInteger(n) && n >= 1 && n <= items.length) return n - 1;
-  } catch {
-    // cai no fuzzy
-  }
-
-  // Fallback: fuzzy local (includes + escore simples)
-  const q = norm(userText);
-  let best = -1,
-    bestScore = 0;
-  items.forEach((it, idx) => {
-    const lab = norm(getLabel(it));
-    // score simples: presença + tamanho da interseção
-    const score = lab.includes(q) ? q.length / Math.max(10, lab.length) : 0;
-    if (score > bestScore) {
-      best = idx;
-      bestScore = score;
-    }
-  });
-  return best; // -1 = nada bom o suficiente
+/** Respostas curtas/educadas que indicam término natural da conversa */
+export function isPoliteEnd(s: string) {
+  const t = norm(` ${s} `);
+  return [
+    " obrigado ",
+    " obrigada ",
+    " valeu ",
+    " agradeco ",
+    " agradeço ",
+    " perfeito ",
+    " deu certo ",
+    " resolveu ",
+    " tudo certo ",
+    " ok ",
+    " tranquilo ",
+    " blz ",
+    " beleza ",
+    " fechou ",
+    " show ",
+  ].some((k) => t.includes(k));
 }
 
-// 3) Yes/No livres
+/** Indica explicitamente que o usuário quer continuar/ajuda de novo */
+export function wantsMoreHelp(s: string) {
+  const t = norm(` ${s} `);
+  return (
+    [
+      " sim ",
+      " quero ajuda ",
+      " preciso de ajuda ",
+      " suporte ",
+      " atendente ",
+      " falar com humano ",
+      " falar com atendente ",
+      " menu ",
+      " mais uma coisa ",
+      " tem mais uma ",
+      " tenho outra ",
+      " outra duvida ",
+      " outra dúvida ",
+      " duvida ",
+      " dúvida ",
+      " ajuda ",
+      " pode me ajudar ",
+      " mais ajuda ",
+    ].some((k) => t.includes(k)) || t.trim() === "1"
+  );
+}
+
+/**
+ * Política desejada:
+ * - Se o usuário NÃO for explícito pedindo ajuda => encerrar educadamente.
+ * - Só continua se wantsMoreHelp() for true.
+ */
+export function shouldEndAfterMoreHelpReply(s: string) {
+  const t = norm(s);
+  // encerra por padrão, a menos que seja explícito que quer ajuda
+  return !wantsMoreHelp(t);
+}
+
+// ===============================================================
+
 export function isYes(s: string) {
   const t = norm(` ${s} `);
   return (
-    ["sim", "isso", "correto", "está certo", "ta certo", "ok", "pode"].some(
-      (k) => t.includes(k)
-    ) || t.trim() === "1"
+    [
+      "sim",
+      "isso",
+      "correto",
+      "está certo",
+      "ta certo",
+      "ok",
+      "pode",
+      "certo",
+    ].some((k) => t.includes(k)) || t.trim() === "1"
   );
 }
 export function isNo(s: string) {
@@ -223,7 +236,6 @@ export function extractCPF(s: string) {
   return d.length === 11 ? d : "";
 }
 
-// 4) Voltar/menu/atendente por texto
 export function wantsMenu(s: string) {
   const t = norm(s);
   return (
@@ -233,6 +245,7 @@ export function wantsMenu(s: string) {
     t.includes("início")
   );
 }
+
 export function wantsHuman(s: string) {
   const t = norm(s);
   return (
@@ -242,7 +255,6 @@ export function wantsHuman(s: string) {
 
 export const onlyDigits = (s: string) => (s || "").replace(/\D/g, "");
 export const toISODate = (s: string) => {
-  // aceita dd/mm/aaaa, dd-mm-aaaa, aaaa-mm-dd
   const t = s.trim();
   const m1 = t.match(/^(\d{2})[\/\-](\d{2})[\/\-](\d{4})$/);
   if (m1) {
@@ -251,7 +263,7 @@ export const toISODate = (s: string) => {
   }
   const m2 = t.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (m2) return t;
-  return ""; // inválida
+  return "";
 };
 
 export async function fetchJSON(url: string, init?: RequestInit) {
@@ -279,7 +291,6 @@ export function formatCPF(cpf: string) {
 }
 
 export function parseBrDateTime(dateBr: string, timeBr: string) {
-  // dateBr: dd/mm/yyyy, timeBr: HH:MM
   const [d, m, y] = dateBr.split("/").map((s) => Number(s));
   const [hh, mm] = (timeBr || "00:00").split(":").map((s) => Number(s));
   return new Date(y, (m || 1) - 1, d || 1, hh || 0, mm || 0, 0, 0);
@@ -328,4 +339,30 @@ export function clearEventContext(
       delete (sess as any).pending.desiredIssue;
     }
   }
+}
+
+export function chooseIndexByText<T>(
+  queryRaw: string,
+  list: T[],
+  getLabel: (item: T) => string
+): number {
+  const query = norm(queryRaw);
+  if (!query || !list?.length) return -1;
+  const qTokens = query.split(/\s+/).filter(Boolean);
+
+  let best = -1;
+  let bestScore = 0;
+
+  for (let i = 0; i < list.length; i++) {
+    const label = norm(getLabel(list[i]));
+    const lTokens = label.split(/\s+/).filter(Boolean);
+    const hits = qTokens.filter((t) => lTokens.includes(t)).length;
+    const score = hits / Math.max(3, lTokens.length);
+    if (score > bestScore) {
+      best = i;
+      bestScore = score;
+    }
+  }
+
+  return bestScore > 0 ? best : -1;
 }

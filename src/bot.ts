@@ -5,7 +5,6 @@ import {
   norm,
   ensureSession,
   friendly,
-  aiSelectFromList,
   isYes,
   isNo,
   isGoMenu,
@@ -14,6 +13,10 @@ import {
   isFixCPF,
   isCreateAccount,
   clearEventContext,
+  // 👇 novos utilitários de pós-atendimento
+  wantsMoreHelp,
+  isPoliteEnd,
+  shouldEndAfterMoreHelpReply,
 } from "./helpers";
 
 import { sessions } from "./state/sessions";
@@ -51,6 +54,44 @@ import {
  *  ========================= */
 const TRIGGER_PHRASE = (process.env.TRIGGER_PHRASE || "Olá Bro").trim();
 const triggerNorm = norm(TRIGGER_PHRASE);
+
+/** =========================
+ *   Helpers locais (fuzzy)
+ *  ========================= */
+
+/**
+ * Escolhe índice por texto com heurística simples:
+ * - normaliza ambos
+ * - score = proporcional à interseção de tokens
+ * - retorna -1 se nada plausível
+ */
+function chooseIndexByText<T>(
+  queryRaw: string,
+  list: T[],
+  getLabel: (item: T) => string
+): number {
+  const query = norm(queryRaw);
+  if (!query || !list?.length) return -1;
+
+  const qTokens = query.split(/\s+/).filter(Boolean);
+  let best = -1;
+  let bestScore = 0;
+
+  list.forEach((item, idx) => {
+    const label = norm(getLabel(item));
+    const lTokens = label.split(/\s+/).filter(Boolean);
+    const hits = qTokens.filter((t) => lTokens.includes(t)).length;
+    // Heurística: acertos ponderados por tamanho do label
+    const score = hits / Math.max(3, lTokens.length);
+    if (score > bestScore) {
+      best = idx;
+      bestScore = score;
+    }
+  });
+
+  // Exige pelo menos 1 token em comum como limiar mínimo
+  return bestScore > 0 ? best : -1;
+}
 
 /** =========================
  *   Handler principal
@@ -91,7 +132,7 @@ export async function handleMessage(msg: Message) {
       const lista = ((sess as any).pending?.eventos as any[]) || [];
       const raw = (text || "").trim();
 
-      // número
+      // seleção por número
       const asNum = Number(raw);
       if (Number.isInteger(asNum) && asNum >= 1 && asNum <= lista.length) {
         const ev = lista[asNum - 1];
@@ -100,11 +141,12 @@ export async function handleMessage(msg: Message) {
           title: String(ev.titulo || "Evento selecionado"),
         };
       } else {
-        // IA por texto
-        const idx = await aiSelectFromList(raw, lista, (ev: any) => {
+        // seleção por texto (fuzzy local)
+        const idx = chooseIndexByText(raw, lista, (ev: any) => {
           const cat = ev.categoria ? ` ${ev.categoria}` : "";
           return `${ev.titulo}${cat}`;
         });
+
         if (idx >= 0) {
           const ev = lista[idx];
           sess.event = {
@@ -159,9 +201,11 @@ export async function handleMessage(msg: Message) {
         evento: "choose_event",
       };
 
-      let selected =
+      // classificador leve assíncrono (continua existindo em helpers)
+      const selected =
         directMap[option] ||
         (await (await import("./helpers")).classifyIssue(text));
+
       if (!selected || selected === "unknown") {
         await sendText(
           from,
@@ -421,18 +465,12 @@ export async function handleMessage(msg: Message) {
 
       const { list, buildText } = matchTshirtByText(raw, map);
 
-      // IA
-      const aiIdx = await aiSelectFromList(raw, list, buildText);
-      if (aiIdx >= 0) {
-        await applyTshirtChange(from, sess, list[aiIdx].tamanho);
-        return;
-      }
-
-      // fallback token
+      // 🔀 Removido aiSelectFromList — tentativas locais:
+      // 1) tokens "AND"
       const q = norm(raw);
       const tokens = q.split(/\s+/).filter(Boolean);
       const pick = list.find((s) => {
-        const hay = buildText(s);
+        const hay = norm(buildText(s));
         return tokens.every((tk) => hay.includes(tk));
       });
       if (pick) {
@@ -440,7 +478,7 @@ export async function handleMessage(msg: Message) {
         return;
       }
 
-      // fallback canônico
+      // 2) fallback canônico simples
       const sizeOnly = q.replace(/\s+/g, "");
       const pick2 = list.find((s) => {
         const tCanon = norm(s.tamanho).replace(/\s+/g, "");
@@ -596,21 +634,32 @@ export async function handleMessage(msg: Message) {
       return;
 
     case "awaiting_more_help": {
-      const ans = norm(text);
-      if (isYes(ans)) return askIssue(from, sess);
-      if (isNo(ans)) {
+      // Política: encerra por padrão, continua só se for explícito
+      if (wantsMoreHelp(text)) {
+        (sess as any).step = "idle";
         await sendText(
           from,
           await friendly(
-            "Perfeito! Qualquer coisa é só chamar. Tenha um ótimo dia! 🙏"
+            "Claro! Me diga com o que posso ajudar ou digite *menu* para ver as opções."
           )
         );
-        sessions.set(phoneE164, { started: false, step: "idle", pending: {} });
         return;
       }
+
+      if (isPoliteEnd(text) || shouldEndAfterMoreHelpReply(text)) {
+        sessions.set(phoneE164, { started: false, step: "idle", pending: {} });
+        await sendText(
+          from,
+          await friendly("Por nada! Se precisar, é só chamar por aqui. 👋")
+        );
+        return;
+      }
+
+      // fallback seguro (ainda encerra, sem loop)
+      sessions.set(phoneE164, { started: false, step: "idle", pending: {} });
       await sendText(
         from,
-        await friendly("Não consegui entender, pode repetir?")
+        await friendly("Qualquer coisa, estou por aqui. Até mais! 👋")
       );
       return;
     }

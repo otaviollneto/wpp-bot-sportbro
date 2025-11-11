@@ -1,25 +1,34 @@
 import { Client, LocalAuth, MessageMedia, Message } from "whatsapp-web.js";
 import QRCode from "qrcode";
-import puppeteer from "puppeteer";
+// ⬇️ você pode remover essa importação se não for usar executablePath do Puppeteer
+// import puppeteer from "puppeteer";
 
-const dataPath = process.env.WAWEB_SESSION_DIR || ".wa-session";
+const dataPath = process.env.WAWEB_SESSION_DIR || "C:\\wpp-session"; // evite OneDrive
 const WEB_VERSION = process.env.WWEBJS_WEB_VERSION || undefined;
 const WEB_VERSION_CACHE: any = WEB_VERSION ? { type: "none" } : undefined;
+
+// se quiser usar seu Chrome/Edge, defina CHROME_PATH no .env
+const chromePath = process.env.CHROME_PATH || undefined;
 
 export const client = new Client({
   authStrategy: new LocalAuth({ dataPath, clientId: "default" }),
   puppeteer: {
-    headless: true,
-    // usa o Chromium baixado pelo puppeteer
-    executablePath: process.env.CHROME_PATH || puppeteer.executablePath(),
+    // para depuração ponha false e veja a janela abrindo:
+    headless: "false" as unknown as boolean | "chrome" | undefined, // 'new' melhora estabilidade; use false p/ debug
+    // NÃO force executablePath do puppeteer a menos que saiba a versão.
+    // executablePath: chromePath || puppeteer.executablePath(),
+    ...(chromePath ? { executablePath: chromePath } : {}),
+
     args: [
       "--no-sandbox",
       "--disable-setuid-sandbox",
       "--disable-dev-shm-usage",
       "--no-first-run",
       "--no-zygote",
-      "--single-process",
       "--disable-gpu",
+      "--disable-extensions",
+      "--disable-features=TranslateUI,BlinkGenPropertyTrees",
+      "--window-size=1280,800",
     ],
   },
   ...(WEB_VERSION ? { webVersion: WEB_VERSION } : {}),
@@ -35,16 +44,15 @@ type WaStatus =
   | "DISCONNECTED"
   | "LOADING";
 let waStatus: WaStatus = "INIT";
-let initialized = false;
+let initializing = false;
 
 export function getQR() {
-  // agora você sabe se precisa exibir o QR ou não
   return { status: waStatus, dataUrl: lastQRDataUrl };
 }
 
 export async function initWA() {
-  if (initialized) return; // evita múltiplas inicializações
-  initialized = true;
+  if (initializing) return;
+  initializing = true;
 
   client.on("qr", async (qr) => {
     try {
@@ -59,21 +67,31 @@ export async function initWA() {
   client.on("ready", () => {
     waStatus = "READY";
     console.log("[WA] pronto");
-    // NÃO zere lastQRDataUrl aqui. Deixe para o cliente decidir se usa.
   });
 
   client.on("loading_screen", (percent, message) => {
     waStatus = "LOADING";
     console.log("[WA] loading:", percent, message);
   });
+
   client.on("change_state", (s) => console.log("[WA] state:", s));
-  client.on("disconnected", (r) => {
+
+  client.on("disconnected", (reason) => {
     waStatus = "DISCONNECTED";
-    console.log("[WA] desconectado:", r);
+    console.warn("[WA] desconectado:", reason);
+    // tenta reerguer com um pequeno backoff
+    setTimeout(() => initializeWithRetry().catch(() => {}), 1500);
   });
+
   client.on("auth_failure", (m) => {
     waStatus = "AUTH_FAIL";
     console.error("[WA] auth_failure:", m);
+  });
+
+  // também loga quando o próprio browser cai
+  client.pupBrowser?.on("disconnected", () => {
+    console.warn("[WA] browser disconnected");
+    waStatus = "DISCONNECTED";
   });
 
   await initializeWithRetry();
@@ -84,17 +102,21 @@ async function initializeWithRetry(maxAttempts = 3) {
   while (attempt < maxAttempts) {
     attempt++;
     try {
+      console.log(`[WA] initialize tentativa ${attempt}/${maxAttempts}`);
       await client.initialize();
       return;
     } catch (err: any) {
       const msg = String(err?.message || err);
       const isNavErr =
+        msg.includes("Navigation failed because browser has disconnected") ||
         msg.includes("Execution context was destroyed") ||
         msg.includes("Most likely because of a navigation") ||
         msg.includes("Cannot read properties of null");
+
       if (isNavErr && attempt < maxAttempts) {
         console.warn(
-          `[WA] initialize falhou por navegação (tentativa ${attempt}/${maxAttempts}) — retry em 1.5s...`
+          `[WA] initialize falhou (navegação). Retentando em 1.5s...`,
+          msg
         );
         await new Promise((r) => setTimeout(r, 1500));
         continue;

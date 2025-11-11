@@ -44,9 +44,7 @@ export async function handleEmailVerification(
     (sess as any).step = "awaiting_birthdate_confirm";
     await sendText(
       to,
-      await friendly(
-        "Obrigada! Agora me informe sua **data de nascimento** (ex.: 23/03/1965)."
-      )
+      "Obrigada! Agora me informe sua **data de nascimento** (ex.: 23/03/1965)."
     );
     return;
   }
@@ -159,6 +157,8 @@ export async function finishForgotPassword(to: string, sess: Session) {
       `Aqui está o link para redefinir sua senha com segurança: ${link}\nSe precisar, fico por aqui.`
     )
   );
+
+  // >>> A PARTIR DAQUI: o fluxo cai em `awaiting_more_help`
   (sess as any).step = "awaiting_more_help";
   await sendText(
     to,
