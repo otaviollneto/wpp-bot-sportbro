@@ -3,6 +3,27 @@ import { Session } from "./type";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
+export const TRIGGER_PHRASE = (process.env.TRIGGER_PHRASE || "Olá Bro").trim();
+export const EXTRA_TRIGGERS = [
+  "iniciar atendimento bro",
+  "iniciar atendimento do bro",
+  "iniciar atendimento",
+  "começar atendimento",
+].map((t) => norm(t));
+export const END_TRIGGERS = [
+  "fim", // já existia
+  "encerrar atendimento bro", // você falando
+  "fim atendimento bro", // outra variação
+  "encerrar atendimento", // genérico
+  "fim atendimento", // genérico
+  "obrigado bro", // agradecimento
+  "obrigada bro", // agradecimento
+  "valeu",
+  "valeu bro",
+  "agradeço",
+  "agradeço bro",
+  "vlw",
+].map((t) => norm(t));
 
 export function norm(s: string) {
   return (s || "")
@@ -24,6 +45,7 @@ export async function classifyIssue(
   | "iss_team"
   | "iss_cancel"
   | "choose_event"
+  | "iss_transfer"
   | "unknown"
 > {
   const prompt = `
@@ -34,6 +56,7 @@ Classifique a solicitação do usuário em UMA destas chaves:
 - iss_team (troca de nome da equipe, equipe)
 - iss_cancel (cancelar inscrição, estorno)
 - choose_event (quando ele quer escolher/alterar evento)
+- iss_transfer (transferir inscrição para outro titular)
 Responda apenas com a chave. Texto: "${text}"
 `;
   try {
@@ -54,6 +77,7 @@ Responda apenas com a chave. Texto: "${text}"
       "iss_team",
       "iss_cancel",
       "choose_event",
+      "iss_transfer",
     ]);
     return allowed.has(key) ? (key as any) : "unknown";
   } catch {
@@ -65,6 +89,14 @@ Responda apenas com a chave. Texto: "${text}"
     if (t.includes("equipe")) return "iss_team";
     if (t.includes("cancel")) return "iss_cancel";
     if (t.includes("evento")) return "choose_event";
+    if (
+      t.includes("titular") ||
+      t.includes("titularidade") ||
+      t.includes("transferir") ||
+      t.includes("transferencia") ||
+      t.includes("transferência")
+    )
+      return "iss_transfer";
     return "unknown";
   }
 }
@@ -181,6 +213,7 @@ export function isYes(s: string) {
       "ok",
       "pode",
       "certo",
+      "AUTORIZO",
     ].some((k) => t.includes(k)) || t.trim() === "1"
   );
 }
@@ -195,6 +228,11 @@ export function isNo(s: string) {
       "corrigir",
       "corrigir cpf",
       "trocar cpf",
+      "NÃO AUTORIZO",
+      "NAO AUTORIZO",
+      "nao autorizo",
+      "não autorizo",
+      "NÃO",
     ].some((k) => t.includes(k)) || t.trim() === "2"
   );
 }
@@ -341,6 +379,36 @@ export function clearEventContext(
   }
 }
 
+// Compare phone numbers more flexibly: exact match, suffix match (handles missing/extra '9'),
+// or matching the last N digits (N up to 9) to tolerate country/area code or formatting differences.
+export function phonesMatch(a: string, b: string) {
+  const A = onlyDigits(a || "");
+  const B = onlyDigits(b || "");
+  if (!A || !B) return false;
+  if (A === B) return true;
+  if (A.endsWith(B) || B.endsWith(A)) return true;
+  const n = Math.min(9, A.length, B.length);
+  if (A.slice(-n) === B.slice(-n)) return true;
+
+  const correct = (s: string) => (s.length > 4 ? "9" + s.slice(4) : s);
+
+  const CA = correct(A);
+  const CB = correct(B);
+
+  if (CA === B || CB === A) return true;
+  if (CA === CB) return true;
+
+  const n2 = Math.min(9, CA.length, B.length);
+  if (CA.slice(-n2) === B.slice(-n2)) return true;
+  const n3 = Math.min(9, CB.length, A.length);
+  if (CB.slice(-n3) === A.slice(-n3)) return true;
+
+  return false;
+}
+
+/** =========================
+ *   Helpers locais
+ *  ========================= */
 export function chooseIndexByText<T>(
   queryRaw: string,
   list: T[],
@@ -349,20 +417,29 @@ export function chooseIndexByText<T>(
   const query = norm(queryRaw);
   if (!query || !list?.length) return -1;
   const qTokens = query.split(/\s+/).filter(Boolean);
-
   let best = -1;
   let bestScore = 0;
-
-  for (let i = 0; i < list.length; i++) {
-    const label = norm(getLabel(list[i]));
+  list.forEach((item, idx) => {
+    const label = norm(getLabel(item));
     const lTokens = label.split(/\s+/).filter(Boolean);
     const hits = qTokens.filter((t) => lTokens.includes(t)).length;
     const score = hits / Math.max(3, lTokens.length);
     if (score > bestScore) {
-      best = i;
+      best = idx;
       bestScore = score;
     }
-  }
-
+  });
   return bestScore > 0 ? best : -1;
+}
+
+export function genToken() {
+  // Gera um número aleatório de 0000 a 9999 (sempre 4 dígitos)
+  return Math.floor(Math.random() * 10000)
+    .toString()
+    .padStart(4, "0");
+}
+
+// Normaliza só dígitos do número
+export function digitsPhone(s: string) {
+  return (s || "").replace(/\D/g, "");
 }

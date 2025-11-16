@@ -28,12 +28,15 @@ export async function lookupUserByCPF(cpf: string) {
   if (!ok) return null;
   const u = data.data;
   const userId = u.id || u.userID || u.userId || u.userid || undefined;
+  const phone = u.phone || u.telefone || u.celular || "";
+  const phoneDigits = phone ? `+55${onlyDigits(phone)}` : "";
   return {
     id: userId,
     name: u.name,
     email: u.email,
     birthDate: u.birthDate,
     cpf,
+    phone: phoneDigits,
   };
 }
 

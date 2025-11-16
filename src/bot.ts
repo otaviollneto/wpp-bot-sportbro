@@ -1,97 +1,67 @@
 import type { Message } from "whatsapp-web.js";
-import { sendText } from "./wa";
-import { Session } from "./type";
+import { applyCancel, askCancelOptions, confirmCancel } from "./flows/cancel";
 import {
-  norm,
-  ensureSession,
-  friendly,
-  isYes,
-  isNo,
-  isGoMenu,
-  isSwitchEvent,
-  extractCPF,
-  isFixCPF,
-  isCreateAccount,
-  clearEventContext,
-  // 👇 novos utilitários de pós-atendimento
-  wantsMoreHelp,
-  isPoliteEnd,
-  shouldEndAfterMoreHelpReply,
-} from "./helpers";
-
-import { sessions } from "./state/sessions";
-
-import { askIssue, greetFoundUser } from "./flows/menu";
-import {
-  askCPF,
-  askCPFVerify,
-  confirmOrCorrectCPFFlow,
-  confirmKnownCPF,
-} from "./flows/cpf";
-import { askEvent } from "./flows/events";
-import {
-  askCategoryOptions,
   applyCategoryChange,
+  askCategoryOptions,
   handleCategoryFreeText,
 } from "./flows/category";
 import {
-  askTshirtOptions,
-  applyTshirtChange,
-  matchTshirtByText,
-} from "./flows/tshirt";
-import { askTeamName, confirmTeamName, applyTeamChange } from "./flows/team";
-import { askCancelOptions, confirmCancel, applyCancel } from "./flows/cancel";
+  askCPF,
+  askCPFVerify,
+  confirmKnownCPF,
+  confirmOrCorrectCPFFlow,
+} from "./flows/cpf";
+import { askEvent } from "./flows/events";
 import {
-  startForgotPassword,
-  handleEmailConfirm,
-  handleEmailVerification,
   handleBirthdateConfirm,
   handleBirthdateVerification,
+  handleEmailConfirm,
+  handleEmailVerification,
+  startForgotPassword,
 } from "./flows/forgot";
+import { askIssue } from "./flows/menu";
+import { applyTeamChange, askTeamName, confirmTeamName } from "./flows/team";
+import {
+  applyTshirtChange,
+  askTshirtOptions,
+  matchTshirtByText,
+} from "./flows/tshirt";
+import {
+  chooseIndexByText,
+  clearEventContext,
+  digitsPhone,
+  END_TRIGGERS,
+  ensureSession,
+  EXTRA_TRIGGERS,
+  extractCPF,
+  fetchJSON,
+  formatCPF,
+  friendly,
+  genToken,
+  isCreateAccount,
+  isFixCPF,
+  isGoMenu,
+  isNo,
+  isPoliteEnd,
+  isSwitchEvent,
+  isYes,
+  norm,
+  phonesMatch,
+  shouldEndAfterMoreHelpReply,
+  TRIGGER_PHRASE,
+  wantsMoreHelp,
+} from "./helpers";
+import { sessions } from "./state/sessions";
+import { sendText } from "./wa";
+import {
+  tryResolveAuthorizationGlobal,
+  startTransferFlow,
+  TransferAuth,
+  pendingAuth,
+  performTransferOwnership,
+} from "./flows/transfer";
 
-/** =========================
- *   Gatilho para iniciar
- *  ========================= */
-const TRIGGER_PHRASE = (process.env.TRIGGER_PHRASE || "Olá Bro").trim();
 const triggerNorm = norm(TRIGGER_PHRASE);
-
-/** =========================
- *   Helpers locais (fuzzy)
- *  ========================= */
-
-/**
- * Escolhe índice por texto com heurística simples:
- * - normaliza ambos
- * - score = proporcional à interseção de tokens
- * - retorna -1 se nada plausível
- */
-function chooseIndexByText<T>(
-  queryRaw: string,
-  list: T[],
-  getLabel: (item: T) => string
-): number {
-  const query = norm(queryRaw);
-  if (!query || !list?.length) return -1;
-
-  const qTokens = query.split(/\s+/).filter(Boolean);
-  let best = -1;
-  let bestScore = 0;
-
-  list.forEach((item, idx) => {
-    const label = norm(getLabel(item));
-    const lTokens = label.split(/\s+/).filter(Boolean);
-    const hits = qTokens.filter((t) => lTokens.includes(t)).length;
-    // Heurística: acertos ponderados por tamanho do label
-    const score = hits / Math.max(3, lTokens.length);
-    if (score > bestScore) {
-      best = idx;
-      bestScore = score;
-    }
-  });
-
-  // Exige pelo menos 1 token em comum como limiar mínimo
-  return bestScore > 0 ? best : -1;
-}
 
 /** =========================
  *   Handler principal
@@ -99,21 +69,40 @@ function chooseIndexByText<T>(
 export async function handleMessage(msg: Message) {
   const text = msg.body?.trim() || "";
   const from = msg.from;
-  const phoneE164 = from.replace(/[^0-9]/g, "");
+  const phoneE164 = digitsPhone(from);
   const sess = ensureSession(phoneE164, sessions);
 
-  if (norm(text) === "fim") {
-    sessions.set(phoneE164, { started: false, step: "idle", pending: {} });
-    await sendText(
-      from,
-      'Sessão encerrada. Envie a frase-gatilho "Olá Bro" para iniciar novamente.'
-    );
-    return;
+  // 1) Primeiro: intercepta possíveis respostas de autorização global (TOKEN 1/2)
+  const handledAuth = await tryResolveAuthorizationGlobal(from, text);
+  if (handledAuth) return;
+
+  // 2) Comando rápido para finalizar sessão
+  {
+    const incoming = norm(text);
+
+    const isEndTrigger = END_TRIGGERS.includes(incoming);
+
+    if (isEndTrigger) {
+      sessions.set(phoneE164, { started: false, step: "idle", pending: {} });
+      await sendText(
+        from,
+        await friendly(
+          'Sessão encerrada. Envie "Olá Bro" ou "Iniciar atendimento BRO" para começar de novo.'
+        )
+      );
+      return;
+    }
   }
 
+  // 3) Boot
   if (!sess.started) {
     const incoming = norm(text);
-    if (incoming.includes(triggerNorm)) {
+
+    const isTrigger =
+      (!!triggerNorm && incoming.includes(triggerNorm)) ||
+      EXTRA_TRIGGERS.some((t) => incoming.includes(t));
+
+    if (isTrigger) {
       sess.started = true;
       await sendText(
         from,
@@ -121,6 +110,7 @@ export async function handleMessage(msg: Message) {
           "Fala, atleta! 🏃‍♂️\nEu sou o BRO, assistente da Sportbro! 💙\nBora começar seu atendimento? Me conta como posso te ajudar. 🙂"
         )
       );
+
       if (sess.user?.cpf) await askCPFVerify(from, sess);
       else await askCPF(from, sess);
     }
@@ -128,12 +118,14 @@ export async function handleMessage(msg: Message) {
   }
 
   switch ((sess as any).step) {
+    /** =========================
+     *  Seleção de evento (comum)
+     *  ========================= */
     case "awaiting_event": {
       const lista = ((sess as any).pending?.eventos as any[]) || [];
       const raw = (text || "").trim();
-
-      // seleção por número
       const asNum = Number(raw);
+
       if (Number.isInteger(asNum) && asNum >= 1 && asNum <= lista.length) {
         const ev = lista[asNum - 1];
         sess.event = {
@@ -141,12 +133,10 @@ export async function handleMessage(msg: Message) {
           title: String(ev.titulo || "Evento selecionado"),
         };
       } else {
-        // seleção por texto (fuzzy local)
         const idx = chooseIndexByText(raw, lista, (ev: any) => {
           const cat = ev.categoria ? ` ${ev.categoria}` : "";
           return `${ev.titulo}${cat}`;
         });
-
         if (idx >= 0) {
           const ev = lista[idx];
           sess.event = {
@@ -157,7 +147,7 @@ export async function handleMessage(msg: Message) {
           await sendText(
             from,
             await friendly(
-              "Não encontrei. Pode digitar parte do nome do evento ou escolher pelo número da lista?"
+              "Não encontrei. Pode digitar parte do nome do evento ou escolher pelo número?"
             )
           );
           await askEvent(from, sess);
@@ -169,7 +159,6 @@ export async function handleMessage(msg: Message) {
         from,
         await friendly(`Perfeito! Anotei o evento **${sess.event.title}**.`)
       );
-
       const desired = (sess as any).pending?.desiredIssue as string | undefined;
       (sess as any).pending.desiredIssue = undefined;
 
@@ -177,10 +166,14 @@ export async function handleMessage(msg: Message) {
       if (desired === "iss_size") return askTshirtOptions(from, sess);
       if (desired === "iss_team") return askTeamName(from, sess);
       if (desired === "iss_cancel") return askCancelOptions(from, sess);
+      if (desired === "iss_transfer") return startTransferFlow(from, sess);
 
       return askIssue(from, sess);
     }
 
+    /** =========================
+     *  Menu principal
+     *  ========================= */
     case "awaiting_issue": {
       const option = norm(text);
       const directMap: Record<string, string> = {
@@ -189,7 +182,7 @@ export async function handleMessage(msg: Message) {
         "3": "iss_size",
         "4": "iss_team",
         "5": "iss_cancel",
-        "6": "choose_event",
+        "6": "iss_transfer",
         senha: "iss_pwd",
         categoria: "iss_cat",
         tamanho: "iss_size",
@@ -199,18 +192,32 @@ export async function handleMessage(msg: Message) {
         "cancelar inscricao": "iss_cancel",
         "cancelar inscrição": "iss_cancel",
         evento: "choose_event",
+        transferir: "iss_transfer",
+        transferencia: "iss_transfer",
+        transferência: "iss_transfer",
+        "transferir titularidade": "iss_transfer",
+        "troca de titularidade": "iss_transfer",
+        titularidade: "iss_transfer",
       };
 
-      // classificador leve assíncrono (continua existindo em helpers)
-      const selected =
+      let selected =
         directMap[option] ||
-        (await (await import("./helpers")).classifyIssue(text));
+        (await (await import("./helpers"))
+          .classifyIssue(text)
+          .catch(() => "unknown"));
+
+      if (
+        selected === "unknown" &&
+        /transfer|titular/i.test(text.normalize("NFD"))
+      ) {
+        selected = "iss_transfer";
+      }
 
       if (!selected || selected === "unknown") {
         await sendText(
           from,
           await friendly(
-            "Pode me dizer em poucas palavras o que você precisa? Ex.: trocar categoria, cancelar inscrição, recuperar senha."
+            "Pode me dizer em poucas palavras o que você precisa? Ex.: trocar categoria, cancelar inscrição, recuperar senha, transferir titularidade."
           )
         );
         await askIssue(from, sess);
@@ -266,14 +273,30 @@ export async function handleMessage(msg: Message) {
             clearEventContext(sess, { keepDesired: true });
             await sendText(
               from,
-              await friendly(
-                "Para cancelar, me diga o evento. Pode digitar o nome."
-              )
+              await friendly("Para cancelar, me diga o evento.")
             );
             await askEvent(from, sess);
             return;
           }
           return askCancelOptions(from, sess);
+
+        case "iss_transfer":
+          if (!sess.event?.id) {
+            (sess as any).pending = {
+              ...((sess as any).pending || {}),
+              desiredIssue: "iss_transfer",
+            };
+            clearEventContext(sess, { keepDesired: true });
+            await sendText(
+              from,
+              await friendly(
+                "Para transferir a titularidade, informe o **evento**."
+              )
+            );
+            await askEvent(from, sess);
+            return;
+          }
+          return startTransferFlow(from, sess);
 
         case "choose_event":
           return askEvent(from, sess);
@@ -281,6 +304,265 @@ export async function handleMessage(msg: Message) {
       return;
     }
 
+    /** =========================
+     *  TRANSFER: novo CPF
+     *  ========================= */
+    case "awaiting_transfer_cpf": {
+      const cpf = extractCPF(text);
+      if (!cpf) {
+        await sendText(
+          from,
+          await friendly("CPF inválido. Digite 11 dígitos (apenas números).")
+        );
+        return;
+      }
+      // Consulta cadastro do novo titular
+      try {
+        const data = await fetchJSON(
+          `${
+            process.env.URL || process.env.API
+          }/api/user_data.php?document=${cpf}`
+        );
+        const user = data?.data;
+        if (!user?.id) {
+          await sendText(
+            from,
+            await friendly(
+              "Não encontrei cadastro para esse CPF. Peça ao **novo titular** que se cadastre no site e me avise."
+            )
+          );
+          (sess as any).step = "awaiting_more_help";
+          return;
+        }
+        (sess as any).pending.transfer = {
+          ...((sess as any).pending.transfer || {}),
+          recipientCPF: cpf,
+          newHolder: {
+            id: Number(user.id),
+            name: String(user.nome || user.name || ""),
+          },
+        };
+
+        const msg = await friendly(
+          `Confirmar novo titular?\nNome: ${String(
+            user.nome || user.name || "Não informado"
+          )}\nCPF: ${formatCPF(cpf)}\n\n1. Confirmar\n2. Corrigir CPF`
+        );
+        await sendText(from, msg);
+        (sess as any).step = "awaiting_transfer_confirm";
+      } catch {
+        await sendText(
+          from,
+          await friendly("Falha ao buscar o CPF. Tente novamente.")
+        );
+      }
+      return;
+    }
+
+    /** =========================
+     *  TRANSFER: confirmar novo titular
+     *  ========================= */
+    case "awaiting_transfer_confirm": {
+      const ans = norm(text);
+      if (ans === "2" || isNo(ans)) {
+        (sess as any).pending.transfer = {
+          ...((sess as any).pending.transfer || {}),
+          recipientCPF: undefined,
+          newHolder: undefined,
+        };
+        await sendText(
+          from,
+          await friendly("Informe o **CPF do novo titular** (11 dígitos).")
+        );
+        (sess as any).step = "awaiting_transfer_cpf";
+        return;
+      }
+      if (!isNo(ans) && !isYes(ans)) {
+        await sendText(
+          from,
+          await friendly("Responda com sim confirmando ou não para corrigir.")
+        );
+        return;
+      }
+
+      const evName = String(sess.event?.title || "evento");
+      const catName = String(
+        (sess as any).pending?.transfer?.categoryTitle || "-"
+      );
+      const cpf = String((sess as any).pending?.transfer?.recipientCPF || "");
+      const newName = String(
+        (sess as any).pending?.transfer?.newHolder?.name || ""
+      );
+
+      // Decide o tipo de confirmação: titular = solicitante?
+      const oldPhoneProfile = String(
+        (sess.user as any)?.phone || (sess.user as any)?.telefone || ""
+      ).trim();
+      const requesterDigits = digitsPhone(from);
+      const profileDigits = digitsPhone(oldPhoneProfile);
+
+      // Se é o próprio titular na conversa, confirma local
+      if (phonesMatch(requesterDigits, profileDigits)) {
+        await sendText(
+          from,
+          await friendly(
+            `Você é o titular atual desta inscrição.\nConfirma a *troca de titularidade* do **${evName}** (categoria **${catName}**) para ${newName} – CPF ${formatCPF(
+              cpf
+            )}?\n\nResponda **AUTORIZO** para confirmar, ou **NÃO** para cancelar.`
+          )
+        );
+        (sess as any).step = "awaiting_transfer_self_confirm";
+        return;
+      }
+
+      // Senão, envia token ao titular atual (telefone do cadastro)
+      if (!oldPhoneProfile) {
+        await sendText(
+          from,
+          await friendly(
+            "Não encontrei telefone cadastrado do titular atual para autorização. Fale com um atendente."
+          )
+        );
+        (sess as any).step = "awaiting_more_help";
+        return;
+      }
+
+      const token = genToken();
+      const auth: TransferAuth = {
+        token,
+        oldPhone: oldPhoneProfile,
+        requesterPhone: from,
+        oldUserId: Number(sess.user!.id),
+        newUserId: Number((sess as any).pending.transfer.newHolder.id),
+        eventId: String(sess.event!.id),
+        eventTitle: evName,
+        categoryId: String((sess as any).pending.transfer.categoryId),
+        categoryTitle: catName,
+        expiresAt: Date.now() + 30 * 60 * 1000, // 30 min
+      };
+      pendingAuth.set(token, auth);
+
+      const target = digitsPhone(oldPhoneProfile);
+      const toTitularText = await friendly(
+        `Confirma a *troca de titularidade* da sua inscrição do evento **${evName}** (categoria **${catName}**) para ${newName} – CPF ${formatCPF(
+          cpf
+        )}?\n\nResponda com código: *${token}* para autorizar.`
+      );
+
+      // Abre sessão do titular aguardando resposta (sem estragar o estado dele, apenas para garantir "started")
+      const titularSess = ensureSession(target, sessions);
+      titularSess.started = true;
+
+      await sendText(target, toTitularText);
+      await sendText(
+        from,
+        await friendly(
+          "Enviei uma mensagem ao titular atual para autorizar. Te aviso aqui assim que ele responder."
+        )
+      );
+      (sess as any).step = "awaiting_transfer_result";
+      return;
+    }
+
+    /** =========================
+     *  TRANSFER: confirmação local (titular = solicitante)
+     *  ========================= */
+    case "awaiting_transfer_self_confirm": {
+      const t = norm(text);
+
+      // Aceita apenas números "1" ou "2"
+      if (t === "1" || isYes(t)) {
+        try {
+          const oldUserId = Number(sess.user!.id);
+          const newUserId = Number((sess as any).pending.transfer.newHolder.id);
+          const eventID = String(sess.event!.id);
+
+          await performTransferOwnership({
+            eventID,
+            oldUserID: oldUserId,
+            newUserID: newUserId,
+          });
+
+          await sendText(
+            from,
+            await friendly("Transferência concluída com sucesso! ✅")
+          );
+          (sess as any).step = "awaiting_more_help";
+          await sendText(
+            from,
+            await friendly("Posso ajudar em mais alguma coisa?")
+          );
+          return;
+        } catch (e: any) {
+          await sendText(
+            from,
+            await friendly(
+              `Não consegui concluir a transferência agora.\nMotivo: ${
+                e?.message || "erro inesperado"
+              }\n\nVocê deseja tentar novamente, falar com um atendente ou voltar ao menu?\n1. Tentar novamente\n2. Falar com atendente\n3. Voltar ao menu`
+            )
+          );
+          (sess as any).step = "awaiting_transfer_retry";
+          return;
+        }
+      }
+
+      if (t === "2" || isNo(t)) {
+        (sess as any).pending.transfer = undefined;
+        await sendText(
+          from,
+          await friendly("Sem problemas! Não realizei a transferência.")
+        );
+        await askIssue(from, sess);
+        return;
+      }
+
+      // Mensagem de orientação
+      await sendText(
+        from,
+        await friendly(
+          "Para confirmar a transferência, responda com **1 (Sim)** ou **2 (Não)**."
+        )
+      );
+      return;
+    }
+
+    /** =========================
+     *  TRANSFER: retry menu (falha)
+     *  ========================= */
+    case "awaiting_transfer_retry": {
+      const t = norm(text);
+      if (t === "1" || t.includes("tentar")) {
+        await startTransferFlow(from, sess);
+        return;
+      }
+      if (t === "2" || t.includes("atendente") || t.includes("humano")) {
+        (sess as any).step = "idle";
+        await sendText(
+          from,
+          await friendly(
+            "Certo! Vou acionar um atendente e repassar sua solicitação."
+          )
+        );
+        return;
+      }
+      if (t === "3" || isGoMenu(text)) {
+        (sess as any).pending.transfer = undefined;
+        await askIssue(from, sess);
+        return;
+      }
+      await sendText(
+        from,
+        await friendly(
+          "Responda com 1 (Tentar novamente), 2 (Falar com atendente) ou 3 (Voltar ao menu)."
+        )
+      );
+      return;
+    }
+
+    /** =========================
+     *  Fluxos existentes
+     *  ========================= */
     case "awaiting_no_category_action": {
       const ans = norm(text);
       if (ans === "1" || ans.includes("atendente")) {
@@ -291,7 +573,7 @@ export async function handleMessage(msg: Message) {
         await sendText(
           from,
           await friendly(
-            "Certo! Vou acionar um atendente humano e repassar sua solicitação. Pode me enviar mais detalhes aqui que eu encaminho. 🙂"
+            "Certo! Vou acionar um atendente humano e repassar sua solicitação. 🙂"
           )
         );
         (sess as any).step = "idle";
@@ -308,7 +590,7 @@ export async function handleMessage(msg: Message) {
       }
       await sendText(
         from,
-        await friendly("Quer Falar com atendente ou voltar ao *Menu*?")
+        await friendly("Quer falar com *atendente* ou voltar ao *Menu*?")
       );
       return;
     }
@@ -323,7 +605,7 @@ export async function handleMessage(msg: Message) {
         await sendText(
           from,
           await friendly(
-            "Certo! Vou acionar um atendente humano e repassar sua solicitação. Pode me enviar mais detalhes aqui que eu encaminho. 🙂"
+            "Certo! Vou acionar um atendente humano e repassar sua solicitação. 🙂"
           )
         );
         (sess as any).step = "idle";
@@ -340,7 +622,7 @@ export async function handleMessage(msg: Message) {
       }
       await sendText(
         from,
-        await friendly("Quer Falar com atendente ou voltar ao *Menu*?")
+        await friendly("Quer falar com *atendente* ou voltar ao *Menu*?")
       );
       return;
     }
@@ -464,9 +746,6 @@ export async function handleMessage(msg: Message) {
       }
 
       const { list, buildText } = matchTshirtByText(raw, map);
-
-      // 🔀 Removido aiSelectFromList — tentativas locais:
-      // 1) tokens "AND"
       const q = norm(raw);
       const tokens = q.split(/\s+/).filter(Boolean);
       const pick = list.find((s) => {
@@ -478,7 +757,6 @@ export async function handleMessage(msg: Message) {
         return;
       }
 
-      // 2) fallback canônico simples
       const sizeOnly = q.replace(/\s+/g, "");
       const pick2 = list.find((s) => {
         const tCanon = norm(s.tamanho).replace(/\s+/g, "");
@@ -493,7 +771,7 @@ export async function handleMessage(msg: Message) {
       await sendText(
         from,
         await friendly(
-          'Não consegui entender. Você pode digitar parte do nome, por exemplo: "gg", "baby look p", "infantil m".'
+          'Não consegui entender. Exemplos: "gg", "baby look p", "infantil m".'
         )
       );
       await askTshirtOptions(from, sess);
@@ -580,6 +858,9 @@ export async function handleMessage(msg: Message) {
       return;
     }
 
+    /** =========================
+     *  CPF + Forgot flows
+     *  ========================= */
     case "awaiting_team_name": {
       const raw = (text || "").trim();
       if (isSwitchEvent(raw)) {
@@ -633,29 +914,26 @@ export async function handleMessage(msg: Message) {
       await handleBirthdateVerification(from, sess, text);
       return;
 
+    /** =========================
+     *  Encerramento padrão
+     *  ========================= */
     case "awaiting_more_help": {
-      // Política: encerra por padrão, continua só se for explícito
       if (wantsMoreHelp(text)) {
         (sess as any).step = "idle";
         await sendText(
           from,
-          await friendly(
-            "Claro! Me diga com o que posso ajudar ou digite *menu* para ver as opções."
-          )
+          await friendly("Claro! Diga como posso ajudar ou digite *menu*.")
         );
         return;
       }
-
       if (isPoliteEnd(text) || shouldEndAfterMoreHelpReply(text)) {
         sessions.set(phoneE164, { started: false, step: "idle", pending: {} });
         await sendText(
           from,
-          await friendly("Por nada! Se precisar, é só chamar por aqui. 👋")
+          await friendly("Por nada! Se precisar, é só chamar. 👋")
         );
         return;
       }
-
-      // fallback seguro (ainda encerra, sem loop)
       sessions.set(phoneE164, { started: false, step: "idle", pending: {} });
       await sendText(
         from,
@@ -669,6 +947,7 @@ export async function handleMessage(msg: Message) {
       break;
   }
 
+  // Se há intenção pendente que depende de evento
   if (sess.started && !sess.event?.id && (sess as any).pending?.desiredIssue) {
     await askEvent(from, sess);
     return;

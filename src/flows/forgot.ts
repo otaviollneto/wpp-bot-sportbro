@@ -111,23 +111,13 @@ export async function finishForgotPassword(to: string, sess: Session) {
   const newEmail = (sess as any).pending?.newEmail?.trim();
   const newBirthISO = toISODate((sess as any).pending?.newBirth || "");
 
-  let needUpdate = false;
-  const body: Record<string, any> = { userID: sess.user?.id };
+  const body: Record<string, any> = {
+    userID: sess.user?.id,
+    email: newEmail,
+    birthdate: newBirthISO,
+  };
 
-  if (
-    newEmail &&
-    currentEmail &&
-    newEmail.toLowerCase() !== currentEmail.toLowerCase()
-  ) {
-    body.email = newEmail;
-    needUpdate = true;
-  }
-  if (newBirthISO && currentBirth && newBirthISO !== currentBirth) {
-    body.birthdate = newBirthISO;
-    needUpdate = true;
-  }
-
-  if (needUpdate && sess.user?.id) {
+  if (sess.user?.id) {
     try {
       await fetchJSON(`${process.env.API}/user_put.php`, {
         method: "PUT",
