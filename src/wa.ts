@@ -140,6 +140,37 @@ export async function sendImageBuffer(
   return client.sendMessage(jid, media);
 }
 
+/**
+ * Envia imagem a partir de um dataURL base64 (ex: retornado por generatePix)
+ * ex: data:image/png;base64,iVBORw0KGgoAAAANS...
+ */
+export async function sendImageBase64(
+  toE164: string,
+  dataUrl: string,
+  filename = "image.png",
+  caption?: string
+) {
+  const jid = await ensureJid(toE164);
+
+  // separa "data:image/png;base64,XXXX..."
+  let mimeType = "image/png";
+  let base64 = dataUrl;
+
+  const parts = dataUrl.split(",");
+  if (parts.length === 2) {
+    base64 = parts[1];
+    const match = parts[0].match(/data:(.*?);base64/);
+    if (match && match[1]) {
+      mimeType = match[1];
+    }
+  }
+
+  const media = new MessageMedia(mimeType, base64, filename);
+  const options = caption ? { caption } : undefined;
+
+  return client.sendMessage(jid, media, options as any);
+}
+
 export type OnMessageHandler = (msg: Message) => void;
 
 export function onMessage(h: OnMessageHandler) {
