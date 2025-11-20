@@ -1,24 +1,16 @@
 import { Client, LocalAuth, MessageMedia, Message } from "whatsapp-web.js";
 import QRCode from "qrcode";
-// ⬇️ você pode remover essa importação se não for usar executablePath do Puppeteer
-// import puppeteer from "puppeteer";
 
-const dataPath = process.env.WAWEB_SESSION_DIR || "C:\\wpp-session"; // evite OneDrive
+const dataPath = process.env.WAWEB_SESSION_DIR || "C:\\wpp-session";
 const WEB_VERSION = process.env.WWEBJS_WEB_VERSION || undefined;
 const WEB_VERSION_CACHE: any = WEB_VERSION ? { type: "none" } : undefined;
-
-// se quiser usar seu Chrome/Edge, defina CHROME_PATH no .env
 const chromePath = process.env.CHROME_PATH || undefined;
 
 export const client = new Client({
   authStrategy: new LocalAuth({ dataPath, clientId: "default" }),
   puppeteer: {
-    // para depuração ponha false e veja a janela abrindo:
-    headless: "false" as unknown as boolean | "chrome" | undefined, // 'new' melhora estabilidade; use false p/ debug
-    // NÃO force executablePath do puppeteer a menos que saiba a versão.
-    // executablePath: chromePath || puppeteer.executablePath(),
+    headless: true,
     ...(chromePath ? { executablePath: chromePath } : {}),
-
     args: [
       "--no-sandbox",
       "--disable-setuid-sandbox",
@@ -36,6 +28,7 @@ export const client = new Client({
 });
 
 let lastQRDataUrl: string | null = null;
+
 type WaStatus =
   | "INIT"
   | "NEEDS_QR"
@@ -43,6 +36,7 @@ type WaStatus =
   | "AUTH_FAIL"
   | "DISCONNECTED"
   | "LOADING";
+
 let waStatus: WaStatus = "INIT";
 let initializing = false;
 
@@ -79,19 +73,12 @@ export async function initWA() {
   client.on("disconnected", (reason) => {
     waStatus = "DISCONNECTED";
     console.warn("[WA] desconectado:", reason);
-    // tenta reerguer com um pequeno backoff
     setTimeout(() => initializeWithRetry().catch(() => {}), 1500);
   });
 
   client.on("auth_failure", (m) => {
     waStatus = "AUTH_FAIL";
     console.error("[WA] auth_failure:", m);
-  });
-
-  // também loga quando o próprio browser cai
-  client.pupBrowser?.on("disconnected", () => {
-    console.warn("[WA] browser disconnected");
-    waStatus = "DISCONNECTED";
   });
 
   await initializeWithRetry();
@@ -115,7 +102,7 @@ async function initializeWithRetry(maxAttempts = 3) {
 
       if (isNavErr && attempt < maxAttempts) {
         console.warn(
-          `[WA] initialize falhou (navegação). Retentando em 1.5s...`,
+          "[WA] initialize falhou (navegação). Retentando em 1.5s...",
           msg
         );
         await new Promise((r) => setTimeout(r, 1500));
@@ -141,22 +128,20 @@ export async function sendText(toE164: string, text: string) {
   return client.sendMessage(jid, text);
 }
 
-export async function sendImageBase64(
+export async function sendImageBuffer(
   toE164: string,
-  base64: string,
-  filename = "pix.png",
-  caption?: string
+  buffer: Buffer,
+  mimeType: string,
+  filename: string
 ) {
   const jid = await ensureJid(toE164);
-  const media = new MessageMedia(
-    "image/png",
-    base64.split(",")[1] || base64,
-    filename
-  );
-  return client.sendMessage(jid, media, { caption });
+  const base64 = buffer.toString("base64");
+  const media = new MessageMedia(mimeType, base64, filename);
+  return client.sendMessage(jid, media);
 }
 
 export type OnMessageHandler = (msg: Message) => void;
+
 export function onMessage(h: OnMessageHandler) {
   client.on("message", h);
 }

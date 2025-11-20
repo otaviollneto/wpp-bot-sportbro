@@ -137,8 +137,8 @@ export async function tryResolveAuthorizationGlobal(
 
 /**
  * Inicia o fluxo de transferência:
- * - Se faltam dados do usuário/evento, coleta.
- * - Lista categorias.
+ * - Garante usuário e evento.
+ * - Pergunta se o solicitante é o titular.
  */
 export async function startTransferFlow(to: string, sess: Session) {
   if (!sess.user?.id) {
@@ -158,10 +158,13 @@ export async function startTransferFlow(to: string, sess: Session) {
     return;
   }
 
+  // Pergunta se é o titular da inscrição
   await sendText(
     to,
-    await friendly("Agora, informe o **CPF do novo titular** (apenas números).")
+    await friendly(
+      "Você é o **titular atual** da inscrição que deseja transferir?\n\n1. Sim, sou o titular.\n2. Não, estou pedindo em nome do titular."
+    )
   );
-  (sess as any).step = "awaiting_transfer_cpf";
+  (sess as any).step = "awaiting_holder_role";
   return;
 }

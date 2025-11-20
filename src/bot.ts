@@ -305,7 +305,183 @@ export async function handleMessage(msg: Message) {
     }
 
     /** =========================
-     *  TRANSFER: novo CPF
+     *  TRANSFER: titular ou não
+     *  ========================= */
+    case "awaiting_holder_role": {
+      const ans = norm(text);
+
+      if (ans === "1" || isYes(ans)) {
+        // O solicitante é o próprio titular
+        (sess as any).pending = {
+          ...((sess as any).pending || {}),
+          transfer: {
+            ...((sess as any).pending?.transfer || {}),
+            oldUser: {
+              id: Number((sess as any).user?.id || (sess as any).user?.ID),
+              name: String(
+                (sess as any).user?.nome ||
+                  (sess as any).user?.name ||
+                  (sess as any).user?.Nome ||
+                  ""
+              ),
+              phone: String(
+                (sess as any).user?.telefone ||
+                  (sess as any).user?.phone ||
+                  (sess as any).user?.celular ||
+                  ""
+              ),
+            },
+          },
+        };
+
+        await sendText(
+          from,
+          await friendly(
+            "Perfeito! Agora me informe o **CPF do novo titular** (apenas números)."
+          )
+        );
+        (sess as any).step = "awaiting_transfer_cpf";
+        return;
+      }
+
+      if (ans === "2" || isNo(ans)) {
+        await sendText(
+          from,
+          await friendly(
+            "Sem problemas! Me informe o **CPF do titular atual da inscrição** (11 dígitos, apenas números)."
+          )
+        );
+        (sess as any).step = "awaiting_holder_cpf";
+        return;
+      }
+
+      await sendText(
+        from,
+        await friendly(
+          "Você é o titular atual da inscrição?\n1. Sim, sou o titular.\n2. Não, estou pedindo em nome do titular."
+        )
+      );
+      return;
+    }
+
+    /** =========================
+     *  TRANSFER: CPF do titular atual
+     *  ========================= */
+    case "awaiting_holder_cpf": {
+      const cpf = extractCPF(text);
+      if (!cpf) {
+        await sendText(
+          from,
+          await friendly(
+            "CPF inválido. Me envie o CPF do titular atual com 11 dígitos (apenas números)."
+          )
+        );
+        return;
+      }
+
+      try {
+        const data = await fetchJSON(
+          `${
+            process.env.URL || process.env.API
+          }/api/user_data.php?document=${cpf}`
+        );
+        const user = data?.data;
+        if (!user?.id) {
+          await sendText(
+            from,
+            await friendly(
+              "Não encontrei cadastro para esse CPF como titular. Peça para o titular se cadastrar no site e me avise."
+            )
+          );
+          (sess as any).step = "awaiting_more_help";
+          return;
+        }
+
+        (sess as any).pending = {
+          ...((sess as any).pending || {}),
+          transfer: {
+            ...((sess as any).pending?.transfer || {}),
+            tempOldCPF: cpf,
+            tempOldHolder: {
+              id: Number(user.id),
+              name: String(user.nome || user.name || ""),
+              phone: String(user.telefone || user.phone || ""),
+            },
+          },
+        };
+
+        const msg = await friendly(
+          `Confirmar titular atual?\nNome: ${String(
+            user.nome || user.name || "Não informado"
+          )}\nCPF: ${formatCPF(cpf)}\n\n1. Confirmar\n2. Corrigir CPF`
+        );
+        await sendText(from, msg);
+        (sess as any).step = "awaiting_holder_confirm";
+      } catch {
+        await sendText(
+          from,
+          await friendly(
+            "Tive um problema ao consultar esse CPF. Tente novamente em instantes."
+          )
+        );
+      }
+      return;
+    }
+
+    /** =========================
+     *  TRANSFER: confirmar titular atual
+     *  ========================= */
+    case "awaiting_holder_confirm": {
+      const ans = norm(text);
+
+      if (ans === "2" || isNo(ans)) {
+        if ((sess as any).pending?.transfer) {
+          delete (sess as any).pending.transfer.tempOldCPF;
+          delete (sess as any).pending.transfer.tempOldHolder;
+        }
+        await sendText(
+          from,
+          await friendly(
+            "Beleza! Me envie novamente o CPF do titular atual (11 dígitos)."
+          )
+        );
+        (sess as any).step = "awaiting_holder_cpf";
+        return;
+      }
+
+      if (ans === "1" || isYes(ans)) {
+        const t = (sess as any).pending?.transfer || {};
+        (sess as any).pending.transfer = {
+          ...t,
+          oldCPF: t.tempOldCPF,
+          oldUser: t.tempOldHolder,
+        };
+        if ((sess as any).pending.transfer) {
+          delete (sess as any).pending.transfer.tempOldCPF;
+          delete (sess as any).pending.transfer.tempOldHolder;
+        }
+
+        await sendText(
+          from,
+          await friendly(
+            "Perfeito! Agora me informe o **CPF do novo titular** (apenas números)."
+          )
+        );
+        (sess as any).step = "awaiting_transfer_cpf";
+        return;
+      }
+
+      await sendText(
+        from,
+        await friendly(
+          "Responda com 1 para confirmar ou 2 para corrigir o CPF do titular atual."
+        )
+      );
+      return;
+    }
+
+    /** =========================
+     *  TRANSFER: CPF do novo titular
      *  ========================= */
     case "awaiting_transfer_cpf": {
       const cpf = extractCPF(text);
@@ -394,9 +570,11 @@ export async function handleMessage(msg: Message) {
         (sess as any).pending?.transfer?.newHolder?.name || ""
       );
 
-      // Decide o tipo de confirmação: titular = solicitante?
+      const transferCtx = (sess as any).pending?.transfer || {};
+      const oldUser = transferCtx.oldUser || (sess as any).user || {};
+
       const oldPhoneProfile = String(
-        (sess.user as any)?.phone || (sess.user as any)?.telefone || ""
+        (oldUser as any)?.phone || (oldUser as any)?.telefone || ""
       ).trim();
       const requesterDigits = digitsPhone(from);
       const profileDigits = digitsPhone(oldPhoneProfile);
@@ -432,7 +610,10 @@ export async function handleMessage(msg: Message) {
         token,
         oldPhone: oldPhoneProfile,
         requesterPhone: from,
-        oldUserId: Number(sess.user!.id),
+        oldUserId: Number(
+          (transferCtx.oldUser && transferCtx.oldUser.id) ||
+            (sess as any).user?.id
+        ),
         newUserId: Number((sess as any).pending.transfer.newHolder.id),
         eventId: String(sess.event!.id),
         eventTitle: evName,
@@ -473,8 +654,12 @@ export async function handleMessage(msg: Message) {
       // Aceita apenas números "1" ou "2"
       if (t === "1" || isYes(t)) {
         try {
-          const oldUserId = Number(sess.user!.id);
-          const newUserId = Number((sess as any).pending.transfer.newHolder.id);
+          const transferCtx = (sess as any).pending?.transfer || {};
+          const oldUserId = Number(
+            (transferCtx.oldUser && transferCtx.oldUser.id) ||
+              (sess as any).user?.id
+          );
+          const newUserId = Number(transferCtx.newHolder.id);
           const eventID = String(sess.event!.id);
 
           await performTransferOwnership({
