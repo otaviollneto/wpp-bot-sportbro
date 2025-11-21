@@ -1,27 +1,41 @@
 import { Client, LocalAuth, MessageMedia, Message } from "whatsapp-web.js";
 import QRCode from "qrcode";
 
-const dataPath = process.env.WAWEB_SESSION_DIR || "C:\\wpp-session";
+const isLinux = process.platform === "linux";
+
+const dataPath =
+  process.env.WAWEB_SESSION_DIR ||
+  (isLinux ? "./.wpp-session" : "C:\\wpp-session");
+
 const WEB_VERSION = process.env.WWEBJS_WEB_VERSION || undefined;
 const WEB_VERSION_CACHE: any = WEB_VERSION ? { type: "none" } : undefined;
+
 const chromePath = process.env.CHROME_PATH || undefined;
+
+const puppeteerArgs = [
+  "--no-sandbox",
+  "--disable-setuid-sandbox",
+  "--disable-dev-shm-usage",
+  "--disable-gpu",
+  "--disable-extensions",
+  "--disable-software-rasterizer",
+  "--disable-background-timer-throttling",
+  "--disable-backgrounding-occluded-windows",
+  "--disable-renderer-backgrounding",
+  "--no-first-run",
+  "--no-zygote",
+  "--disable-features=TranslateUI,BlinkGenPropertyTrees",
+  "--ignore-certificate-errors",
+  "--ignore-certificate-errors-spki-list",
+  "--window-size=1280,800",
+];
 
 export const client = new Client({
   authStrategy: new LocalAuth({ dataPath, clientId: "default" }),
   puppeteer: {
     headless: true,
     ...(chromePath ? { executablePath: chromePath } : {}),
-    args: [
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      "--disable-dev-shm-usage",
-      "--no-first-run",
-      "--no-zygote",
-      "--disable-gpu",
-      "--disable-extensions",
-      "--disable-features=TranslateUI,BlinkGenPropertyTrees",
-      "--window-size=1280,800",
-    ],
+    args: puppeteerArgs,
   },
   ...(WEB_VERSION ? { webVersion: WEB_VERSION } : {}),
   ...(WEB_VERSION_CACHE ? { webVersionCache: WEB_VERSION_CACHE } : {}),
@@ -140,10 +154,6 @@ export async function sendImageBuffer(
   return client.sendMessage(jid, media);
 }
 
-/**
- * Envia imagem a partir de um dataURL base64 (ex: retornado por generatePix)
- * ex: data:image/png;base64,iVBORw0KGgoAAAANS...
- */
 export async function sendImageBase64(
   toE164: string,
   dataUrl: string,
@@ -152,7 +162,6 @@ export async function sendImageBase64(
 ) {
   const jid = await ensureJid(toE164);
 
-  // separa "data:image/png;base64,XXXX..."
   let mimeType = "image/png";
   let base64 = dataUrl;
 
