@@ -2,10 +2,6 @@ import { Client, LocalAuth, MessageMedia, Message } from "whatsapp-web.js";
 import QRCode from "qrcode";
 
 const dataPath = process.env.WAWEB_SESSION_DIR || "/root/wpp-session";
-
-const WEB_VERSION = process.env.WWEBJS_WEB_VERSION || undefined;
-const WEB_VERSION_CACHE: any = WEB_VERSION ? { type: "none" } : undefined;
-
 const chromePath = process.env.CHROME_PATH || undefined;
 
 const puppeteerArgs = [
@@ -33,8 +29,11 @@ export const client = new Client({
     ...(chromePath ? { executablePath: chromePath } : {}),
     args: puppeteerArgs,
   },
-  ...(WEB_VERSION ? { webVersion: WEB_VERSION } : {}),
-  ...(WEB_VERSION_CACHE ? { webVersionCache: WEB_VERSION_CACHE } : {}),
+  // se quiser, pode usar cache remoto de versão depois, mas deixa simples por enquanto
+  // webVersionCache: {
+  //   type: "remote",
+  //   remotePath: "https://raw.githubusercontent.com/wppconnect-team/wa-version/main/last.json",
+  // },
 });
 
 let lastQRDataUrl: string | null = null;
