@@ -333,6 +333,11 @@ app.post("/send-text-img-multi-csv", upload.any(), async (req, res) => {
 });
 
 onMessage(async (msg) => {
+  if (getQR().status !== "READY") {
+    console.log("[WA] Ignorando msg: WA não está READY ainda.");
+    return;
+  }
+
   try {
     await handleMessage(msg);
   } catch (e) {
