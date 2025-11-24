@@ -345,11 +345,13 @@ const port = Number(process.env.PORT || 3000);
 (async () => {
   try {
     if (process.env.USE_WA === "true") {
-      await initWA();
+      initWA().catch((err) => {
+        console.error("[bootstrap] falha ao iniciar WA:", err);
+      });
     }
     app.listen(port, "0.0.0.0", () => console.log("HTTP on", port));
   } catch (err) {
-    console.error("[bootstrap] falha ao iniciar:", err);
+    console.error("[bootstrap] falha ao iniciar app HTTP:", err);
     process.exit(1);
   }
 })();

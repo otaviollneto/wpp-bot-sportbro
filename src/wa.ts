@@ -1,11 +1,7 @@
 import { Client, LocalAuth, MessageMedia, Message } from "whatsapp-web.js";
 import QRCode from "qrcode";
 
-const isLinux = process.platform === "linux";
-
-const dataPath =
-  process.env.WAWEB_SESSION_DIR ||
-  (isLinux ? "./.wpp-session" : "C:\\wpp-session");
+const dataPath = process.env.WAWEB_SESSION_DIR || "./wpp-session";
 
 const WEB_VERSION = process.env.WWEBJS_WEB_VERSION || undefined;
 const WEB_VERSION_CACHE: any = WEB_VERSION ? { type: "none" } : undefined;
