@@ -184,6 +184,7 @@ export async function handleMessage(msg: Message) {
         "4": "iss_team",
         "5": "iss_cancel",
         "6": "iss_transfer",
+        "7": "iss_faq",
         senha: "iss_pwd",
         categoria: "iss_cat",
         tamanho: "iss_size",

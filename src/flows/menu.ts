@@ -10,7 +10,9 @@ export async function askIssue(to: string, sess: Session) {
       3. Troca de Tamanho Camiseta
       4. Troca de Nome da Equipe
       5. Cancelar Inscrição
-      6. Troca de Titularidade`
+      6. Troca de Titularidade
+      7. Dúvidas sobre Evento
+    `
   );
   await sendText(to, msg);
   (sess as any).step = "awaiting_issue";
