@@ -168,6 +168,10 @@ export async function handleMessage(msg: Message) {
       if (desired === "iss_team") return askTeamName(from, sess);
       if (desired === "iss_cancel") return askCancelOptions(from, sess);
       if (desired === "iss_transfer") return startTransferFlow(from, sess);
+      if (desired === "iss_faq_contact") {
+        await sendFaqOrganizerLink(from, sess);
+        return;
+      }
 
       return askIssue(from, sess);
     }
@@ -1139,66 +1143,6 @@ export async function handleMessage(msg: Message) {
         await friendly("Qualquer coisa, estou por aqui. Até mais! 👋")
       );
       return;
-    }
-
-    case "awaiting_event": {
-      const lista = ((sess as any).pending?.eventos as any[]) || [];
-      const raw = (text || "").trim();
-      const asNum = Number(raw);
-
-      if (Number.isInteger(asNum) && asNum >= 1 && asNum <= lista.length) {
-        const ev = lista[asNum - 1];
-        (sess as any).event = {
-          id: String(ev.id),
-          title: String(ev.titulo || "Evento selecionado"),
-          slug: String(
-            ev.slug || ev.Slug || ev.url_amigavel || ev.url || ""
-          ).trim(),
-        };
-      } else {
-        const idx = chooseIndexByText(raw, lista, (ev: any) => {
-          const cat = ev.categoria ? ` ${ev.categoria}` : "";
-          return `${ev.titulo}${cat}`;
-        });
-        if (idx >= 0) {
-          const ev = lista[idx];
-          (sess as any).event = {
-            id: String(ev.id),
-            title: String(ev.titulo || "Evento selecionado"),
-            slug: String(
-              ev.slug || ev.Slug || ev.url_amigavel || ev.url || ""
-            ).trim(),
-          };
-        } else {
-          await sendText(
-            from,
-            await friendly(
-              "Não encontrei. Pode digitar parte do nome do evento ou escolher pelo número?"
-            )
-          );
-          await askEvent(from, sess);
-          return;
-        }
-      }
-
-      await sendText(
-        from,
-        await friendly(`Perfeito! Anotei o evento **${sess?.event?.title}**.`)
-      );
-      const desired = (sess as any).pending?.desiredIssue as string | undefined;
-      (sess as any).pending.desiredIssue = undefined;
-
-      if (desired === "iss_cat") return askCategoryOptions(from, sess);
-      if (desired === "iss_size") return askTshirtOptions(from, sess);
-      if (desired === "iss_team") return askTeamName(from, sess);
-      if (desired === "iss_cancel") return askCancelOptions(from, sess);
-      if (desired === "iss_transfer") return startTransferFlow(from, sess);
-      if (desired === "iss_faq_contact") {
-        await sendFaqOrganizerLink(from, sess);
-        return;
-      }
-
-      return askIssue(from, sess);
     }
 
     case "idle":
