@@ -108,7 +108,7 @@ export async function handleMessage(msg: Message) {
       await sendText(
         from,
         await friendly(
-          "Fala, atleta! 🏃‍♂️\nEu sou o BRO, assistente da Sportbro! 💙\nBora começar seu atendimento? Me conta como posso te ajudar. 🙂"
+          "Fala, atleta! 🏃‍♂️\nEu sou o BRO, a assistente da Sportbro! 💙"
         )
       );
 
