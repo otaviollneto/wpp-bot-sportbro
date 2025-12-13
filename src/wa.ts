@@ -124,12 +124,84 @@ async function initializeWithRetry(maxAttempts = 3) {
   throw new Error("Falha ao inicializar o WhatsApp após múltiplas tentativas.");
 }
 
+function normalizeDigits(input: string) {
+  return (input || "").replace(/\D/g, "");
+}
+
+function withBrazilCountry(d: string) {
+  if (!d) return "";
+  if (d.startsWith("55")) return d;
+  return "55" + d;
+}
+
+/**
+ * Gera tentativas prováveis (principalmente BR):
+ * - mantém como está
+ * - força prefixo 55
+ * - se ficar 12 (55 + 10), tenta inserir 9 após DDD (55 + DDD + 9 + XXXXXXXX)
+ * - se ficar 10 (DDD + 8), tenta inserir 9 (DDD + 9 + XXXXXXXX) e depois prefixa 55
+ */
+function buildCandidates(raw: string) {
+  const base = normalizeDigits(raw);
+  const cands = new Set<string>();
+
+  if (!base) return [];
+
+  // 1) como está + com 55
+  cands.add(base);
+  cands.add(withBrazilCountry(base));
+
+  const br = withBrazilCountry(base);
+
+  // Se veio 10 dígitos (DDD+8), tenta virar 11 (DDD+9+8)
+  if (base.length === 10) {
+    const ddd = base.slice(0, 2);
+    const rest = base.slice(2);
+    cands.add(ddd + "9" + rest);
+    cands.add("55" + ddd + "9" + rest);
+  }
+
+  // Se ficou 12 (55 + DDD + 8), tenta virar 13 inserindo 9
+  if (br.length === 12 && br.startsWith("55")) {
+    const ddd = br.slice(2, 4);
+    const rest = br.slice(4); // 8 dígitos
+    cands.add("55" + ddd + "9" + rest);
+  }
+
+  // Se ficou 11 sem 55 (DDD+9+8), garante com 55 também
+  if (base.length === 11) {
+    cands.add("55" + base);
+  }
+
+  return Array.from(cands).filter((x) => x.length >= 10 && x.length <= 13);
+}
+
 async function ensureJid(toE164: string) {
-  const number = (toE164 || "").replace(/\D/g, "");
-  if (!number) throw new Error("Número não informado");
-  const jid = await client.getNumberId(number);
-  if (!jid) throw new Error("Número inválido ou não registrado no WhatsApp");
-  return jid._serialized;
+  const raw = (toE164 || "").trim();
+  const candidates = buildCandidates(raw);
+
+  if (!candidates.length) throw new Error("Número não informado");
+
+  // tenta getNumberId nas variações
+  for (const digits of candidates) {
+    try {
+      const jid = await client.getNumberId(digits);
+      if (jid?._serialized) return jid._serialized;
+    } catch {
+      // segue para próxima variação
+    }
+  }
+
+  // fallback: tentar enviar direto (sem validação prévia)
+  // OBS: isso não garante que existe, mas evita falso negativo do getNumberId
+  const best = candidates.find((c) => c.startsWith("55")) || candidates[0];
+  const directJid = `${best}@c.us`;
+
+  // Se você preferir NÃO fazer fallback, comente as 2 linhas abaixo
+  return directJid;
+
+  // Se não quiser fallback, use:
+  // throw new Error(`Número inválido ou não registrado no WhatsApp: tentativas=${candidates.join(",")}`);
 }
 
 export async function sendText(toE164: string, text: string) {
