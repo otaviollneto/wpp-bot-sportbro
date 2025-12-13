@@ -68,6 +68,8 @@ const triggerNorm = norm(TRIGGER_PHRASE);
  *   Handler principal
  *  ========================= */
 export async function handleMessage(msg: Message) {
+  console.log("[WA] mensagem recebida de", msg.from);
+  console.log("  >", msg.body);
   const text = msg.body?.trim() || "";
   const from = msg.from;
   const phoneE164 = digitsPhone(from);
