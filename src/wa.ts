@@ -29,7 +29,6 @@ export const client = new Client({
     ...(chromePath ? { executablePath: chromePath } : {}),
     args: puppeteerArgs,
   },
-  // se quiser, pode usar cache remoto de versão depois, mas deixa simples por enquanto
   // webVersionCache: {
   //   type: "remote",
   //   remotePath: "https://raw.githubusercontent.com/wppconnect-team/wa-version/main/last.json",
@@ -124,38 +123,67 @@ async function initializeWithRetry(maxAttempts = 3) {
   throw new Error("Falha ao inicializar o WhatsApp após múltiplas tentativas.");
 }
 
-async function ensureJid(toE164: string) {
-  const number = (toE164 || "").replace(/\D/g, "");
-  if (!number) throw new Error("Número não informado");
-  const jid = await client.getNumberId(number);
-  if (!jid) throw new Error("Número inválido ou não registrado no WhatsApp");
-  return jid._serialized;
+/** =========================
+ *  ✅ NOVO: aceitar JID (@lid/@c.us/@g.us) OU telefone
+ *  ========================= */
+
+function isJid(to: string) {
+  return /@(c\.us|g\.us|lid)$/i.test(to || "");
 }
 
-export async function sendText(toE164: string, text: string) {
-  const jid = await ensureJid(toE164);
+function normalizePhoneToDigits(to: string) {
+  return (to || "").replace(/\D/g, "");
+}
+
+async function ensureJid(to: string) {
+  if (!to) throw new Error("Destino não informado");
+
+  // ✅ se já veio JID (ex.: msg.from = "...@lid" / "...@c.us" / "...@g.us")
+  if (isJid(to)) return to;
+
+  // ✅ caso seja +55..., 55..., etc.
+  const number = normalizePhoneToDigits(to);
+  if (!number) throw new Error("Número não informado");
+
+  const id = await client.getNumberId(number);
+  if (!id) throw new Error("Número inválido ou não registrado no WhatsApp");
+  return id._serialized; // ex: "553499999999@c.us"
+}
+
+/** =========================
+ *  Envio de mensagens
+ *  ========================= */
+
+export async function sendText(to: string, text: string) {
+  const jid = await ensureJid(to);
   return client.sendMessage(jid, text);
 }
 
 export async function sendImageBuffer(
-  toE164: string,
+  to: string,
   buffer: Buffer,
   mimeType: string,
-  filename: string
+  filename: string,
+  caption?: string
 ) {
-  const jid = await ensureJid(toE164);
+  const jid = await ensureJid(to);
   const base64 = buffer.toString("base64");
   const media = new MessageMedia(mimeType, base64, filename);
-  return client.sendMessage(jid, media);
+
+  return client.sendMessage(
+    jid,
+    media,
+    caption ? ({ caption } as any) : undefined
+  );
 }
 
 export async function sendImageBase64(
-  toE164: string,
+  to: string,
   dataUrl: string,
   filename = "image.png",
   caption?: string
 ) {
-  const jid = await ensureJid(toE164);
+  const jid = await ensureJid(to);
 
   let mimeType = "image/png";
   let base64 = dataUrl;
@@ -170,9 +198,11 @@ export async function sendImageBase64(
   }
 
   const media = new MessageMedia(mimeType, base64, filename);
-  const options = caption ? { caption } : undefined;
-
-  return client.sendMessage(jid, media, options as any);
+  return client.sendMessage(
+    jid,
+    media,
+    caption ? ({ caption } as any) : undefined
+  );
 }
 
 export type OnMessageHandler = (msg: Message) => void;
