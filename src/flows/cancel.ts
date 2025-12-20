@@ -66,7 +66,7 @@ export async function askCancelOptions(to: string, sess: Session) {
       await sendText(
         to,
         await friendly(
-          `Não encontrei inscrições **elegíveis** para cancelamento no evento **${sess.event.title}** (precisa ter até 7 dias da compra e status Pago/Disponível).\n\nO que você prefere?\n1. Falar com atendente\n2. Voltar ao menu`
+          `Não encontrei inscrições **elegíveis** para cancelamento no evento **${sess.event.title}** (precisa ter até **7 dias** da compra e status Pago/Disponível).\n\nO que você prefere?\n1. Falar com atendente\n2. Voltar ao menu`
         )
       );
       (sess as any).step = "awaiting_no_cancel_action";
