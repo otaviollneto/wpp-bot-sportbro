@@ -66,9 +66,35 @@ export async function initWA() {
     }
   });
 
-  client.on("ready", () => {
+  client.on("ready", async () => {
     waStatus = "READY";
     console.log("[WA] pronto");
+
+    try {
+      const page = (client as any).pupPage;
+      if (page) {
+        await page.evaluate(() => {
+          // @ts-ignore
+          const old = window.WWebJS?.sendSeen;
+          // @ts-ignore
+          if (old && !window.WWebJS.__patchedSendSeen) {
+            // @ts-ignore
+            window.WWebJS.__patchedSendSeen = true;
+            // @ts-ignore
+            window.WWebJS.sendSeen = async (...args) => {
+              try {
+                return await old(...args);
+              } catch (e) {
+                return null;
+              }
+            };
+          }
+        });
+        console.log("[WA] patch sendSeen aplicado");
+      }
+    } catch (e) {
+      console.warn("[WA] falha ao aplicar patch sendSeen:", e);
+    }
   });
 
   client.on("loading_screen", (percent, message) => {
@@ -132,22 +158,23 @@ function isJid(to: string) {
 }
 
 function normalizePhoneToDigits(to: string) {
-  return (to || "").replace(/\D/g, "");
+  let digits = (to || "").replace(/\D/g, "");
+
+  if (digits.length === 11) digits = "55" + digits;
+  if (digits.length === 13 && digits.startsWith("55")) return digits;
+  if (!digits.startsWith("55")) digits = "55" + digits;
+
+  return digits;
 }
 
 async function ensureJid(to: string) {
   if (!to) throw new Error("Destino não informado");
-
-  // ✅ se já veio JID (ex.: msg.from = "...@lid" / "...@c.us" / "...@g.us")
   if (isJid(to)) return to;
 
-  // ✅ caso seja +55..., 55..., etc.
   const number = normalizePhoneToDigits(to);
   if (!number) throw new Error("Número não informado");
 
-  const id = await client.getNumberId(number);
-  if (!id) throw new Error("Número inválido ou não registrado no WhatsApp");
-  return id._serialized; // ex: "553499999999@c.us"
+  return `${number}@c.us`;
 }
 
 /** =========================
