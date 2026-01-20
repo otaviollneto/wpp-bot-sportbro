@@ -345,7 +345,7 @@ onMessage(async (msg) => {
   }
 });
 
-const port = Number(process.env.PORT || 8080);
+const port = Number(process.env.PORT || 3000);
 
 (async () => {
   try {
