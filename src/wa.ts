@@ -29,10 +29,11 @@ export const client = new Client({
     ...(chromePath ? { executablePath: chromePath } : {}),
     args: puppeteerArgs,
   },
-  // webVersionCache: {
-  //   type: "remote",
-  //   remotePath: "https://raw.githubusercontent.com/wppconnect-team/wa-version/main/last.json",
-  // },
+  webVersionCache: {
+    type: "remote",
+    remotePath:
+      "https://raw.githubusercontent.com/wppconnect-team/wa-version/main/last.json",
+  },
 });
 
 let lastQRDataUrl: string | null = null;
@@ -137,7 +138,7 @@ async function initializeWithRetry(maxAttempts = 3) {
       if (isNavErr && attempt < maxAttempts) {
         console.warn(
           "[WA] initialize falhou (navegação). Retentando em 1.5s...",
-          msg
+          msg,
         );
         await new Promise((r) => setTimeout(r, 1500));
         continue;
@@ -159,11 +160,8 @@ function isJid(to: string) {
 
 function normalizePhoneToDigits(to: string) {
   let digits = (to || "").replace(/\D/g, "");
-
   if (digits.length === 11) digits = "55" + digits;
-  if (digits.length === 13 && digits.startsWith("55")) return digits;
   if (!digits.startsWith("55")) digits = "55" + digits;
-
   return digits;
 }
 
@@ -177,13 +175,45 @@ async function ensureJid(to: string) {
   return `${number}@c.us`;
 }
 
+async function ensureChatId(to: string) {
+  if (!to) throw new Error("Destino não informado");
+  if (isJid(to)) return to;
+
+  const number = normalizePhoneToDigits(to);
+  const numberId = await client.getNumberId(number);
+
+  if (!numberId?._serialized) {
+    throw new Error(
+      "Número não encontrado no WhatsApp (getNumberId retornou null).",
+    );
+  }
+
+  return numberId._serialized;
+}
+
 /** =========================
  *  Envio de mensagens
  *  ========================= */
 
+async function sendMessageSafe(chatId: string, content: any, options?: any) {
+  try {
+    return await client.sendMessage(chatId, content, options);
+  } catch (err: any) {
+    const msg = String(err?.message || err);
+    if (!msg.includes("No LID for user")) throw err;
+
+    const res = await client.getContactLidAndPhone([chatId]);
+    const lid = res?.[0]?.lid;
+
+    if (!lid) throw err;
+
+    return await client.sendMessage(`${lid}@lid`, content, options);
+  }
+}
+
 export async function sendText(to: string, text: string) {
-  const jid = await ensureJid(to);
-  return client.sendMessage(jid, text);
+  const chatId = await ensureChatId(to);
+  return sendMessageSafe(chatId, text);
 }
 
 export async function sendImageBuffer(
@@ -191,7 +221,7 @@ export async function sendImageBuffer(
   buffer: Buffer,
   mimeType: string,
   filename: string,
-  caption?: string
+  caption?: string,
 ) {
   const jid = await ensureJid(to);
   const base64 = buffer.toString("base64");
@@ -200,7 +230,7 @@ export async function sendImageBuffer(
   return client.sendMessage(
     jid,
     media,
-    caption ? ({ caption } as any) : undefined
+    caption ? ({ caption } as any) : undefined,
   );
 }
 
@@ -208,7 +238,7 @@ export async function sendImageBase64(
   to: string,
   dataUrl: string,
   filename = "image.png",
-  caption?: string
+  caption?: string,
 ) {
   const jid = await ensureJid(to);
 
@@ -228,7 +258,7 @@ export async function sendImageBase64(
   return client.sendMessage(
     jid,
     media,
-    caption ? ({ caption } as any) : undefined
+    caption ? ({ caption } as any) : undefined,
   );
 }
 
