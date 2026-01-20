@@ -89,13 +89,13 @@ app.post("/send-text-img-multi-csv", upload.any(), async (req, res) => {
         originalname: f.originalname,
         mimetype: f.mimetype,
         size: f.size,
-      }))
+      })),
     );
 
     const csvFile =
       files.find((f) => f.fieldname === "csv") ||
       files.find(
-        (f) => f.mimetype.includes("csv") || f.originalname.endsWith(".csv")
+        (f) => f.mimetype.includes("csv") || f.originalname.endsWith(".csv"),
       );
 
     const imageFile =
@@ -162,7 +162,7 @@ app.post("/send-text-img-multi-csv", upload.any(), async (req, res) => {
     }
 
     console.log(
-      `[send-text-img-multi-csv] config: isDryRun=${isDryRun}, minDelay=${minDelay}, maxDelay=${maxDelay}, batchSize=${batchSizeNum}, batchPauseMs=${batchPause}`
+      `[send-text-img-multi-csv] config: isDryRun=${isDryRun}, minDelay=${minDelay}, maxDelay=${maxDelay}, batchSize=${batchSizeNum}, batchPauseMs=${batchPause}`,
     );
 
     const buf = csvFile.buffer;
@@ -242,11 +242,11 @@ app.post("/send-text-img-multi-csv", upload.any(), async (req, res) => {
 
     const uniqueRows = Array.from(uniqueRowsMap.values());
     console.log(
-      `[send-text-img-multi-csv] removidos duplicados: ${rows.length} → ${uniqueRows.length}`
+      `[send-text-img-multi-csv] removidos duplicados: ${rows.length} → ${uniqueRows.length}`,
     );
 
     console.log(
-      `[send-text-img-multi-csv] processando: rowsUnique=${uniqueRows.length}, csv=${csvFile.originalname}, image=${imageFile.originalname}, columnPhone=${phoneCol}, columnName=${nameCol}, dryRun=${isDryRun}`
+      `[send-text-img-multi-csv] processando: rowsUnique=${uniqueRows.length}, csv=${csvFile.originalname}, image=${imageFile.originalname}, columnPhone=${phoneCol}, columnName=${nameCol}, dryRun=${isDryRun}`,
     );
 
     const success: any[] = [];
@@ -288,7 +288,7 @@ app.post("/send-text-img-multi-csv", upload.any(), async (req, res) => {
           const delay =
             minDelay + (range > 0 ? Math.floor(Math.random() * range) : 0);
           console.log(
-            `[send-text-img-multi-csv] enviado para +${digits}, aguardando ${delay}ms...`
+            `[send-text-img-multi-csv] enviado para +${digits}, aguardando ${delay}ms...`,
           );
           await sleep(delay);
 
@@ -300,7 +300,7 @@ app.post("/send-text-img-multi-csv", upload.any(), async (req, res) => {
             console.log(
               `[send-text-img-multi-csv] fim de lote (${
                 index + 1
-              } envios). Pausando ${batchPause}ms...`
+              } envios). Pausando ${batchPause}ms...`,
             );
             await sleep(batchPause);
           }
@@ -308,7 +308,7 @@ app.post("/send-text-img-multi-csv", upload.any(), async (req, res) => {
       } catch (err: any) {
         console.error(
           `[send-text-img-multi-csv] erro ao enviar para linha ${index + 1}:`,
-          err
+          err,
         );
         failed.push({ row, reason: err?.message || String(err) });
       }
@@ -345,7 +345,7 @@ onMessage(async (msg) => {
   }
 });
 
-const port = Number(process.env.PORT || 3000);
+const port = Number(process.env.PORT || 8080);
 
 (async () => {
   try {
