@@ -1,4 +1,4 @@
-import { sendText } from "../wa";
+import { sendText } from "../wa.baileys";
 import { Session } from "../type";
 import { friendly } from "../helpers";
 
@@ -12,7 +12,7 @@ export async function askIssue(to: string, sess: Session) {
       5. Cancelar Inscrição
       6. Troca de Titularidade
       7. Dúvidas sobre Evento
-    `
+    `,
   );
   await sendText(to, msg);
   (sess as any).step = "awaiting_issue";
@@ -22,7 +22,7 @@ export async function greetFoundUser(to: string, name: string) {
   await sendText(
     to,
     await friendly(
-      `Oi, ${name}! Que bom te ver por aqui — encontrei seu cadastro certinho. Vamos seguir com o atendimento?`
-    )
+      `Oi, ${name}! Que bom te ver por aqui — encontrei seu cadastro certinho. Vamos seguir com o atendimento?`,
+    ),
   );
 }

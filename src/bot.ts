@@ -1,4 +1,3 @@
-import type { Message } from "whatsapp-web.js";
 import { applyCancel, askCancelOptions, confirmCancel } from "./flows/cancel";
 import {
   applyCategoryChange,
@@ -52,7 +51,7 @@ import {
   wantsMoreHelp,
 } from "./helpers";
 import { sessions } from "./state/sessions";
-import { sendText } from "./wa";
+import { sendText } from "./wa.baileys";
 import {
   tryResolveAuthorizationGlobal,
   startTransferFlow,
@@ -64,10 +63,15 @@ import { handleFaqFlow, sendFaqOrganizerLink, startFaqFlow } from "./flows/faq";
 
 const triggerNorm = norm(TRIGGER_PHRASE);
 
+type IncomingMessage = {
+  from: string;
+  body: string;
+};
+
 /** =========================
  *   Handler principal
  *  ========================= */
-export async function handleMessage(msg: Message) {
+export async function handleMessage(msg: IncomingMessage) {
   console.log("[WA] mensagem recebida de", msg.from);
   console.log("  >", msg.body);
   const text = msg.body?.trim() || "";
@@ -90,8 +94,8 @@ export async function handleMessage(msg: Message) {
       await sendText(
         from,
         await friendly(
-          'Sessão encerrada. Envie "Olá Bro" ou "Iniciar atendimento BRO" para começar de novo.'
-        )
+          'Sessão encerrada. Envie "Olá Bro" ou "Iniciar atendimento BRO" para começar de novo.',
+        ),
       );
       return;
     }
@@ -110,8 +114,8 @@ export async function handleMessage(msg: Message) {
       await sendText(
         from,
         await friendly(
-          "Fala, atleta! 🏃‍♂️\nEu sou o BRO, a assistente da Sportbro! 💙"
-        )
+          "Fala, atleta! 🏃‍♂️\nEu sou o BRO, a assistente da Sportbro! 💙",
+        ),
       );
 
       if (sess.user?.cpf) await askCPFVerify(from, sess);
@@ -150,8 +154,8 @@ export async function handleMessage(msg: Message) {
           await sendText(
             from,
             await friendly(
-              "Não encontrei. Pode digitar parte do nome do evento ou escolher pelo número?"
-            )
+              "Não encontrei. Pode digitar parte do nome do evento ou escolher pelo número?",
+            ),
           );
           await askEvent(from, sess);
           return;
@@ -160,7 +164,7 @@ export async function handleMessage(msg: Message) {
 
       await sendText(
         from,
-        await friendly(`Perfeito! Anotei o evento **${sess.event.title}**.`)
+        await friendly(`Perfeito! Anotei o evento **${sess.event.title}**.`),
       );
       const desired = (sess as any).pending?.desiredIssue as string | undefined;
       (sess as any).pending.desiredIssue = undefined;
@@ -229,8 +233,8 @@ export async function handleMessage(msg: Message) {
         await sendText(
           from,
           await friendly(
-            "Pode me dizer em poucas palavras o que você precisa? Ex.: trocar categoria, cancelar inscrição, recuperar senha, transferir titularidade."
-          )
+            "Pode me dizer em poucas palavras o que você precisa? Ex.: trocar categoria, cancelar inscrição, recuperar senha, transferir titularidade.",
+          ),
         );
         await askIssue(from, sess);
         return;
@@ -285,7 +289,7 @@ export async function handleMessage(msg: Message) {
             clearEventContext(sess, { keepDesired: true });
             await sendText(
               from,
-              await friendly("Para cancelar, me diga o evento.")
+              await friendly("Para cancelar, me diga o evento."),
             );
             await askEvent(from, sess);
             return;
@@ -302,8 +306,8 @@ export async function handleMessage(msg: Message) {
             await sendText(
               from,
               await friendly(
-                "Para transferir a titularidade, informe o **evento**."
-              )
+                "Para transferir a titularidade, informe o **evento**.",
+              ),
             );
             await askEvent(from, sess);
             return;
@@ -342,13 +346,13 @@ export async function handleMessage(msg: Message) {
                 (sess as any).user?.nome ||
                   (sess as any).user?.name ||
                   (sess as any).user?.Nome ||
-                  ""
+                  "",
               ),
               phone: String(
                 (sess as any).user?.telefone ||
                   (sess as any).user?.phone ||
                   (sess as any).user?.celular ||
-                  ""
+                  "",
               ),
             },
           },
@@ -357,8 +361,8 @@ export async function handleMessage(msg: Message) {
         await sendText(
           from,
           await friendly(
-            "Perfeito! Agora me informe o **CPF do novo titular** (apenas números)."
-          )
+            "Perfeito! Agora me informe o **CPF do novo titular** (apenas números).",
+          ),
         );
         (sess as any).step = "awaiting_transfer_cpf";
         return;
@@ -368,8 +372,8 @@ export async function handleMessage(msg: Message) {
         await sendText(
           from,
           await friendly(
-            "Sem problemas! Me informe o **CPF do titular atual da inscrição** (11 dígitos, apenas números)."
-          )
+            "Sem problemas! Me informe o **CPF do titular atual da inscrição** (11 dígitos, apenas números).",
+          ),
         );
         (sess as any).step = "awaiting_holder_cpf";
         return;
@@ -378,8 +382,8 @@ export async function handleMessage(msg: Message) {
       await sendText(
         from,
         await friendly(
-          "Você é o titular atual da inscrição?\n1. Sim, sou o titular.\n2. Não, estou pedindo em nome do titular."
-        )
+          "Você é o titular atual da inscrição?\n1. Sim, sou o titular.\n2. Não, estou pedindo em nome do titular.",
+        ),
       );
       return;
     }
@@ -393,8 +397,8 @@ export async function handleMessage(msg: Message) {
         await sendText(
           from,
           await friendly(
-            "CPF inválido. Me envie o CPF do titular atual com 11 dígitos (apenas números)."
-          )
+            "CPF inválido. Me envie o CPF do titular atual com 11 dígitos (apenas números).",
+          ),
         );
         return;
       }
@@ -403,15 +407,15 @@ export async function handleMessage(msg: Message) {
         const data = await fetchJSON(
           `${
             process.env.URL || process.env.API
-          }/api/user_data.php?document=${cpf}`
+          }/api/user_data.php?document=${cpf}`,
         );
         const user = data?.data;
         if (!user?.id) {
           await sendText(
             from,
             await friendly(
-              "Não encontrei cadastro para esse CPF como titular. Peça para o titular se cadastrar no site e me avise."
-            )
+              "Não encontrei cadastro para esse CPF como titular. Peça para o titular se cadastrar no site e me avise.",
+            ),
           );
           (sess as any).step = "awaiting_more_help";
           return;
@@ -432,8 +436,8 @@ export async function handleMessage(msg: Message) {
 
         const msg = await friendly(
           `Confirmar titular atual?\nNome: ${String(
-            user.nome || user.name || "Não informado"
-          )}\nCPF: ${formatCPF(cpf)}\n\n1. Confirmar\n2. Corrigir CPF`
+            user.nome || user.name || "Não informado",
+          )}\nCPF: ${formatCPF(cpf)}\n\n1. Confirmar\n2. Corrigir CPF`,
         );
         await sendText(from, msg);
         (sess as any).step = "awaiting_holder_confirm";
@@ -441,8 +445,8 @@ export async function handleMessage(msg: Message) {
         await sendText(
           from,
           await friendly(
-            "Tive um problema ao consultar esse CPF. Tente novamente em instantes."
-          )
+            "Tive um problema ao consultar esse CPF. Tente novamente em instantes.",
+          ),
         );
       }
       return;
@@ -462,8 +466,8 @@ export async function handleMessage(msg: Message) {
         await sendText(
           from,
           await friendly(
-            "Beleza! Me envie novamente o CPF do titular atual (11 dígitos)."
-          )
+            "Beleza! Me envie novamente o CPF do titular atual (11 dígitos).",
+          ),
         );
         (sess as any).step = "awaiting_holder_cpf";
         return;
@@ -484,8 +488,8 @@ export async function handleMessage(msg: Message) {
         await sendText(
           from,
           await friendly(
-            "Perfeito! Agora me informe o **CPF do novo titular** (apenas números)."
-          )
+            "Perfeito! Agora me informe o **CPF do novo titular** (apenas números).",
+          ),
         );
         (sess as any).step = "awaiting_transfer_cpf";
         return;
@@ -494,8 +498,8 @@ export async function handleMessage(msg: Message) {
       await sendText(
         from,
         await friendly(
-          "Responda com 1 para confirmar ou 2 para corrigir o CPF do titular atual."
-        )
+          "Responda com 1 para confirmar ou 2 para corrigir o CPF do titular atual.",
+        ),
       );
       return;
     }
@@ -508,7 +512,7 @@ export async function handleMessage(msg: Message) {
       if (!cpf) {
         await sendText(
           from,
-          await friendly("CPF inválido. Digite 11 dígitos (apenas números).")
+          await friendly("CPF inválido. Digite 11 dígitos (apenas números)."),
         );
         return;
       }
@@ -517,15 +521,15 @@ export async function handleMessage(msg: Message) {
         const data = await fetchJSON(
           `${
             process.env.URL || process.env.API
-          }/api/user_data.php?document=${cpf}`
+          }/api/user_data.php?document=${cpf}`,
         );
         const user = data?.data;
         if (!user?.id) {
           await sendText(
             from,
             await friendly(
-              "Não encontrei cadastro para esse CPF. Peça ao **novo titular** que se cadastre no site e me avise."
-            )
+              "Não encontrei cadastro para esse CPF. Peça ao **novo titular** que se cadastre no site e me avise.",
+            ),
           );
           (sess as any).step = "awaiting_more_help";
           return;
@@ -541,15 +545,15 @@ export async function handleMessage(msg: Message) {
 
         const msg = await friendly(
           `Confirmar novo titular?\nNome: ${String(
-            user.nome || user.name || "Não informado"
-          )}\nCPF: ${formatCPF(cpf)}\n\n1. Confirmar\n2. Corrigir CPF`
+            user.nome || user.name || "Não informado",
+          )}\nCPF: ${formatCPF(cpf)}\n\n1. Confirmar\n2. Corrigir CPF`,
         );
         await sendText(from, msg);
         (sess as any).step = "awaiting_transfer_confirm";
       } catch {
         await sendText(
           from,
-          await friendly("Falha ao buscar o CPF. Tente novamente.")
+          await friendly("Falha ao buscar o CPF. Tente novamente."),
         );
       }
       return;
@@ -568,7 +572,7 @@ export async function handleMessage(msg: Message) {
         };
         await sendText(
           from,
-          await friendly("Informe o **CPF do novo titular** (11 dígitos).")
+          await friendly("Informe o **CPF do novo titular** (11 dígitos)."),
         );
         (sess as any).step = "awaiting_transfer_cpf";
         return;
@@ -576,25 +580,25 @@ export async function handleMessage(msg: Message) {
       if (!isNo(ans) && !isYes(ans)) {
         await sendText(
           from,
-          await friendly("Responda com sim confirmando ou não para corrigir.")
+          await friendly("Responda com sim confirmando ou não para corrigir."),
         );
         return;
       }
 
       const evName = String(sess.event?.title || "evento");
       const catName = String(
-        (sess as any).pending?.transfer?.categoryTitle || "-"
+        (sess as any).pending?.transfer?.categoryTitle || "-",
       );
       const cpf = String((sess as any).pending?.transfer?.recipientCPF || "");
       const newName = String(
-        (sess as any).pending?.transfer?.newHolder?.name || ""
+        (sess as any).pending?.transfer?.newHolder?.name || "",
       );
 
       const transferCtx = (sess as any).pending?.transfer || {};
       const oldUser = transferCtx.oldUser || (sess as any).user || {};
 
       const oldPhoneProfile = String(
-        (oldUser as any)?.phone || (oldUser as any)?.telefone || ""
+        (oldUser as any)?.phone || (oldUser as any)?.telefone || "",
       ).trim();
       const requesterDigits = digitsPhone(from);
       const profileDigits = digitsPhone(oldPhoneProfile);
@@ -605,9 +609,9 @@ export async function handleMessage(msg: Message) {
           from,
           await friendly(
             `Você é o titular atual desta inscrição.\nConfirma a *troca de titularidade* do **${evName}** (categoria **${catName}**) para ${newName} – CPF ${formatCPF(
-              cpf
-            )}?\n\nResponda **AUTORIZO** para confirmar, ou **NÃO** para cancelar.`
-          )
+              cpf,
+            )}?\n\nResponda **AUTORIZO** para confirmar, ou **NÃO** para cancelar.`,
+          ),
         );
         (sess as any).step = "awaiting_transfer_self_confirm";
         return;
@@ -618,8 +622,8 @@ export async function handleMessage(msg: Message) {
         await sendText(
           from,
           await friendly(
-            "Não encontrei telefone cadastrado do titular atual para autorização. Fale com um atendente."
-          )
+            "Não encontrei telefone cadastrado do titular atual para autorização. Fale com um atendente.",
+          ),
         );
         (sess as any).step = "awaiting_more_help";
         return;
@@ -632,7 +636,7 @@ export async function handleMessage(msg: Message) {
         requesterPhone: from,
         oldUserId: Number(
           (transferCtx.oldUser && transferCtx.oldUser.id) ||
-            (sess as any).user?.id
+            (sess as any).user?.id,
         ),
         newUserId: Number((sess as any).pending.transfer.newHolder.id),
         eventId: String(sess.event!.id),
@@ -646,8 +650,8 @@ export async function handleMessage(msg: Message) {
       const target = digitsPhone(oldPhoneProfile);
       const toTitularText = await friendly(
         `Confirma a *troca de titularidade* da sua inscrição do evento **${evName}** (categoria **${catName}**) para ${newName} – CPF ${formatCPF(
-          cpf
-        )}?\n\nResponda com código: *${token}* para autorizar.`
+          cpf,
+        )}?\n\nResponda com código: *${token}* para autorizar.`,
       );
 
       // Abre sessão do titular aguardando resposta (sem estragar o estado dele, apenas para garantir "started")
@@ -658,8 +662,8 @@ export async function handleMessage(msg: Message) {
       await sendText(
         from,
         await friendly(
-          "Enviei uma mensagem ao titular atual para autorizar. Te aviso aqui assim que ele responder."
-        )
+          "Enviei uma mensagem ao titular atual para autorizar. Te aviso aqui assim que ele responder.",
+        ),
       );
       (sess as any).step = "awaiting_transfer_result";
       return;
@@ -677,7 +681,7 @@ export async function handleMessage(msg: Message) {
           const transferCtx = (sess as any).pending?.transfer || {};
           const oldUserId = Number(
             (transferCtx.oldUser && transferCtx.oldUser.id) ||
-              (sess as any).user?.id
+              (sess as any).user?.id,
           );
           const newUserId = Number(transferCtx.newHolder.id);
           const eventID = String(sess.event!.id);
@@ -690,12 +694,12 @@ export async function handleMessage(msg: Message) {
 
           await sendText(
             from,
-            await friendly("Transferência concluída com sucesso! ✅")
+            await friendly("Transferência concluída com sucesso! ✅"),
           );
           (sess as any).step = "awaiting_more_help";
           await sendText(
             from,
-            await friendly("Posso ajudar em mais alguma coisa?")
+            await friendly("Posso ajudar em mais alguma coisa?"),
           );
           return;
         } catch (e: any) {
@@ -704,8 +708,8 @@ export async function handleMessage(msg: Message) {
             await friendly(
               `Não consegui concluir a transferência agora.\nMotivo: ${
                 e?.message || "erro inesperado"
-              }\n\nVocê deseja tentar novamente, falar com um atendente ou voltar ao menu?\n1. Tentar novamente\n2. Falar com atendente\n3. Voltar ao menu`
-            )
+              }\n\nVocê deseja tentar novamente, falar com um atendente ou voltar ao menu?\n1. Tentar novamente\n2. Falar com atendente\n3. Voltar ao menu`,
+            ),
           );
           (sess as any).step = "awaiting_transfer_retry";
           return;
@@ -716,7 +720,7 @@ export async function handleMessage(msg: Message) {
         (sess as any).pending.transfer = undefined;
         await sendText(
           from,
-          await friendly("Sem problemas! Não realizei a transferência.")
+          await friendly("Sem problemas! Não realizei a transferência."),
         );
         await askIssue(from, sess);
         return;
@@ -726,8 +730,8 @@ export async function handleMessage(msg: Message) {
       await sendText(
         from,
         await friendly(
-          "Para confirmar a transferência, responda com **1 (Sim)** ou **2 (Não)**."
-        )
+          "Para confirmar a transferência, responda com **1 (Sim)** ou **2 (Não)**.",
+        ),
       );
       return;
     }
@@ -746,8 +750,8 @@ export async function handleMessage(msg: Message) {
         await sendText(
           from,
           await friendly(
-            "Certo! Vou acionar um atendente e repassar sua solicitação."
-          )
+            "Certo! Vou acionar um atendente e repassar sua solicitação.",
+          ),
         );
         return;
       }
@@ -759,8 +763,8 @@ export async function handleMessage(msg: Message) {
       await sendText(
         from,
         await friendly(
-          "Responda com 1 (Tentar novamente), 2 (Falar com atendente) ou 3 (Voltar ao menu)."
-        )
+          "Responda com 1 (Tentar novamente), 2 (Falar com atendente) ou 3 (Voltar ao menu).",
+        ),
       );
       return;
     }
@@ -778,8 +782,8 @@ export async function handleMessage(msg: Message) {
         await sendText(
           from,
           await friendly(
-            "Certo! Vou acionar um atendente humano e repassar sua solicitação. 🙂"
-          )
+            "Certo! Vou acionar um atendente humano e repassar sua solicitação. 🙂",
+          ),
         );
         (sess as any).step = "idle";
         return;
@@ -795,7 +799,7 @@ export async function handleMessage(msg: Message) {
       }
       await sendText(
         from,
-        await friendly("Quer falar com *atendente* ou voltar ao *Menu*?")
+        await friendly("Quer falar com *atendente* ou voltar ao *Menu*?"),
       );
       return;
     }
@@ -810,8 +814,8 @@ export async function handleMessage(msg: Message) {
         await sendText(
           from,
           await friendly(
-            "Certo! Vou acionar um atendente humano e repassar sua solicitação. 🙂"
-          )
+            "Certo! Vou acionar um atendente humano e repassar sua solicitação. 🙂",
+          ),
         );
         (sess as any).step = "idle";
         return;
@@ -827,7 +831,7 @@ export async function handleMessage(msg: Message) {
       }
       await sendText(
         from,
-        await friendly("Quer falar com *atendente* ou voltar ao *Menu*?")
+        await friendly("Quer falar com *atendente* ou voltar ao *Menu*?"),
       );
       return;
     }
@@ -843,8 +847,8 @@ export async function handleMessage(msg: Message) {
         await sendText(
           from,
           await friendly(
-            "Certo! Vou acionar um atendente e repassar sua solicitação."
-          )
+            "Certo! Vou acionar um atendente e repassar sua solicitação.",
+          ),
         );
         (sess as any).step = "idle";
         return;
@@ -861,7 +865,7 @@ export async function handleMessage(msg: Message) {
       }
       await sendText(
         from,
-        await friendly("Quer *Falar com atendente* ou voltar ao *Menu*?")
+        await friendly("Quer *Falar com atendente* ou voltar ao *Menu*?"),
       );
       return;
     }
@@ -878,8 +882,8 @@ export async function handleMessage(msg: Message) {
         await sendText(
           from,
           await friendly(
-            "Ok! Vou acionar um atendente e repassar sua solicitação."
-          )
+            "Ok! Vou acionar um atendente e repassar sua solicitação.",
+          ),
         );
         return;
       }
@@ -891,8 +895,8 @@ export async function handleMessage(msg: Message) {
       await sendText(
         from,
         await friendly(
-          "Responda com 1 (Trocar de evento), 2 (Falar com atendente) ou 3 (Voltar ao menu)."
-        )
+          "Responda com 1 (Trocar de evento), 2 (Falar com atendente) ou 3 (Voltar ao menu).",
+        ),
       );
       return;
     }
@@ -925,8 +929,8 @@ export async function handleMessage(msg: Message) {
       await sendText(
         from,
         await friendly(
-          "Não consegui entender. Pode repetir? Você pode digitar parte do nome da categoria."
-        )
+          "Não consegui entender. Pode repetir? Você pode digitar parte do nome da categoria.",
+        ),
       );
       await askCategoryOptions(from, sess);
       return;
@@ -976,8 +980,8 @@ export async function handleMessage(msg: Message) {
       await sendText(
         from,
         await friendly(
-          'Não consegui entender. Exemplos: "gg", "baby look p", "infantil m".'
-        )
+          'Não consegui entender. Exemplos: "gg", "baby look p", "infantil m".',
+        ),
       );
       await askTshirtOptions(from, sess);
       return;
@@ -1002,7 +1006,7 @@ export async function handleMessage(msg: Message) {
       }
       await sendText(
         from,
-        await friendly("Não consegui entender. Pode repetir?")
+        await friendly("Não consegui entender. Pode repetir?"),
       );
       await askCancelOptions(from, sess);
       return;
@@ -1021,14 +1025,14 @@ export async function handleMessage(msg: Message) {
         }
         await sendText(
           from,
-          await friendly("Sem problemas! Não realizei o cancelamento.")
+          await friendly("Sem problemas! Não realizei o cancelamento."),
         );
         await askIssue(from, sess);
         return;
       }
       await sendText(
         from,
-        await friendly("Não consegui entender, pode repetir?")
+        await friendly("Não consegui entender, pode repetir?"),
       );
       return;
     }
@@ -1044,8 +1048,8 @@ export async function handleMessage(msg: Message) {
         await sendText(
           from,
           await friendly(
-            "Certo! Vou acionar um atendente e repassar sua solicitação."
-          )
+            "Certo! Vou acionar um atendente e repassar sua solicitação.",
+          ),
         );
         return;
       }
@@ -1057,8 +1061,8 @@ export async function handleMessage(msg: Message) {
       await sendText(
         from,
         await friendly(
-          "Responda com 1 (Tentar novamente), 2 (Falar com atendente) ou 3 (Voltar ao menu)."
-        )
+          "Responda com 1 (Tentar novamente), 2 (Falar com atendente) ou 3 (Voltar ao menu).",
+        ),
       );
       return;
     }
@@ -1127,7 +1131,7 @@ export async function handleMessage(msg: Message) {
         (sess as any).step = "idle";
         await sendText(
           from,
-          await friendly("Claro! Diga como posso ajudar ou digite *menu*.")
+          await friendly("Claro! Diga como posso ajudar ou digite *menu*."),
         );
         return;
       }
@@ -1135,14 +1139,14 @@ export async function handleMessage(msg: Message) {
         sessions.set(phoneE164, { started: false, step: "idle", pending: {} });
         await sendText(
           from,
-          await friendly("Por nada! Se precisar, é só chamar. 👋")
+          await friendly("Por nada! Se precisar, é só chamar. 👋"),
         );
         return;
       }
       sessions.set(phoneE164, { started: false, step: "idle", pending: {} });
       await sendText(
         from,
-        await friendly("Qualquer coisa, estou por aqui. Até mais! 👋")
+        await friendly("Qualquer coisa, estou por aqui. Até mais! 👋"),
       );
       return;
     }
@@ -1161,7 +1165,7 @@ export async function handleMessage(msg: Message) {
   await sendText(
     from,
     await friendly(
-      'Estou aqui para ajudar! Você pode me dizer o que precisa ou responder ao menu. Se preferir, digite "fim" para reiniciar.'
-    )
+      'Estou aqui para ajudar! Você pode me dizer o que precisa ou responder ao menu. Se preferir, digite "fim" para reiniciar.',
+    ),
   );
 }

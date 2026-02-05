@@ -1,7 +1,7 @@
 import "dotenv/config";
 import express from "express";
 import multer from "multer";
-import { initWA, getQR, onMessage, sendText, sendImageBuffer } from "./wa";
+import { initWA, getQR, onMessage, sendText, sendImageBuffer } from "./wa.baileys";
 import { handleMessage } from "./bot";
 import { sendPix } from "./media";
 import { parse } from "csv-parse/sync";
@@ -47,7 +47,10 @@ app.post("/send-text", async (req, res) => {
   const { to, message } = req.body;
   try {
     const r = await sendText(to, message);
-    res.json({ id: r.id.id, ack: r.ack });
+    if (!r) {
+      return res.status(500).json({ error: "Failed to send message" });
+    }
+    res.json({ id: r.key?.id, ack: r.status });
   } catch (e: any) {
     res.status(400).json({ error: e.message });
   }

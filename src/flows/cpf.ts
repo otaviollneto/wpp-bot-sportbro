@@ -1,4 +1,4 @@
-import { sendText } from "../wa";
+import { sendText } from "../wa.baileys";
 import { Session } from "../type";
 import { friendly, formatCPF, onlyDigits, norm, fetchJSON } from "../helpers";
 import { greetFoundUser, askIssue } from "./menu";
@@ -6,7 +6,7 @@ import { greetFoundUser, askIssue } from "./menu";
 export async function askCPF(to: string, sess: Session) {
   sess.step = "awaiting_cpf";
   const msg = await friendly(
-    "Para começar, pode me informar **seu CPF de cadastro**? Pode digitar com ou sem pontos e traço, eu organizo por aqui. 🙂"
+    "Para começar, pode me informar **seu CPF de cadastro**? Pode digitar com ou sem pontos e traço, eu organizo por aqui. 🙂",
   );
   await sendText(to, msg);
 }
@@ -15,14 +15,14 @@ export async function askCPFVerify(to: string, sess: Session) {
   if (!sess.user?.cpf) return askCPF(to, sess);
   sess.step = "awaiting_cpf_verify";
   const msg = await friendly(
-    `Encontrei seu CPF como **${formatCPF(sess.user.cpf)}**. Está correto?`
+    `Encontrei seu CPF como **${formatCPF(sess.user.cpf)}**. Está correto?`,
   );
   await sendText(to, msg);
 }
 
 export async function lookupUserByCPF(cpf: string) {
   const data = await fetchJSON(
-    `${process.env.API}/user_data.php?document=${cpf}`
+    `${process.env.API}/user_data.php?document=${cpf}`,
   );
   const ok = !!data?.success && !!data?.data;
   if (!ok) return null;
@@ -54,7 +54,7 @@ export async function confirmOrCorrectCPFFlow(
     isFixCPF: (s: string) => boolean;
     isCreateAccount: (s: string) => boolean;
     friendly: (s: string) => Promise<string>;
-  }
+  },
 ) {
   // menu de correção ativo
   if ((sess as any).pending?.cpfChoiceMenu) {
@@ -63,7 +63,7 @@ export async function confirmOrCorrectCPFFlow(
       (sess as any).pending.cpfChoiceMenu = false;
       await sendText(
         from,
-        await friendly("Beleza! Vou tentar com esse CPF novo.")
+        await friendly("Beleza! Vou tentar com esse CPF novo."),
       );
       try {
         const user = await lookupUserByCPF(newCpf);
@@ -72,8 +72,8 @@ export async function confirmOrCorrectCPFFlow(
           await sendText(
             from,
             await friendly(
-              "Ainda não encontrei cadastro com esse CPF. Prefere **corrigir** de novo ou **fazer cadastro**?"
-            )
+              "Ainda não encontrei cadastro com esse CPF. Prefere **corrigir** de novo ou **fazer cadastro**?",
+            ),
           );
           return { done: false };
         }
@@ -86,8 +86,8 @@ export async function confirmOrCorrectCPFFlow(
         await sendText(
           from,
           await friendly(
-            "Não consegui consultar agora. Tenta me enviar o CPF novamente ou diga *cadastro* para criar sua conta."
-          )
+            "Não consegui consultar agora. Tenta me enviar o CPF novamente ou diga *cadastro* para criar sua conta.",
+          ),
         );
         return { done: false };
       }
@@ -97,7 +97,7 @@ export async function confirmOrCorrectCPFFlow(
       (sess as any).pending.cpfChoiceMenu = false;
       await sendText(
         from,
-        await friendly("Sem problema! Me envia o CPF correto, por favor.")
+        await friendly("Sem problema! Me envia o CPF correto, por favor."),
       );
       return { done: false };
     }
@@ -107,8 +107,8 @@ export async function confirmOrCorrectCPFFlow(
       await sendText(
         from,
         await friendly(
-          `Perfeito! Você pode criar sua conta aqui: ${link}. Quando terminar, me avisa.`
-        )
+          `Perfeito! Você pode criar sua conta aqui: ${link}. Quando terminar, me avisa.`,
+        ),
       );
       return { done: false };
     }
@@ -116,8 +116,8 @@ export async function confirmOrCorrectCPFFlow(
     await sendText(
       from,
       await friendly(
-        "Não entendi bem. Você quer **corrigir o CPF** ou **fazer cadastro**? Pode responder com as palavras ou mandar o CPF novo."
-      )
+        "Não entendi bem. Você quer **corrigir o CPF** ou **fazer cadastro**? Pode responder com as palavras ou mandar o CPF novo.",
+      ),
     );
     return { done: false };
   }
@@ -128,8 +128,8 @@ export async function confirmOrCorrectCPFFlow(
     await sendText(
       from,
       await friendly(
-        "Esse CPF parece incompleto. Me envie com 11 dígitos, por favor."
-      )
+        "Esse CPF parece incompleto. Me envie com 11 dígitos, por favor.",
+      ),
     );
     return { done: false };
   }
@@ -144,8 +144,8 @@ export async function confirmOrCorrectCPFFlow(
       await sendText(
         from,
         await friendly(
-          "Não encontrei cadastro com esse CPF. Prefere **corrigir** o CPF ou **fazer cadastro**?"
-        )
+          "Não encontrei cadastro com esse CPF. Prefere **corrigir** o CPF ou **fazer cadastro**?",
+        ),
       );
       return { done: false };
     }
@@ -157,8 +157,8 @@ export async function confirmOrCorrectCPFFlow(
     await sendText(
       from,
       await friendly(
-        "Não consegui consultar agora. Pode tentar novamente em instantes?"
-      )
+        "Não consegui consultar agora. Pode tentar novamente em instantes?",
+      ),
     );
     return { done: false };
   }
@@ -178,7 +178,7 @@ export async function confirmKnownCPF(
     isYes: (s: string) => boolean;
     isNo: (s: string) => boolean;
     friendly: (s: string) => Promise<string>;
-  }
+  },
 ) {
   // usuário mandou outro CPF direto
   const maybeCpf = extractCPF(text);
@@ -193,8 +193,8 @@ export async function confirmKnownCPF(
         await sendText(
           from,
           await friendly(
-            "Não encontrei cadastro com esse novo CPF. Você prefere **corrigir** de novo ou **fazer cadastro**?"
-          )
+            "Não encontrei cadastro com esse novo CPF. Você prefere **corrigir** de novo ou **fazer cadastro**?",
+          ),
         );
         return;
       }
@@ -206,8 +206,8 @@ export async function confirmKnownCPF(
       await sendText(
         from,
         await friendly(
-          "Não consegui consultar agora. Pode tentar novamente ou dizer *corrigir* para enviar outro CPF?"
-        )
+          "Não consegui consultar agora. Pode tentar novamente ou dizer *corrigir* para enviar outro CPF?",
+        ),
       );
       return;
     }
@@ -222,8 +222,8 @@ export async function confirmKnownCPF(
         await sendText(
           from,
           await friendly(
-            "Não consegui confirmar seu cadastro com esse CPF. Me envie o CPF novamente?"
-          )
+            "Não consegui confirmar seu cadastro com esse CPF. Me envie o CPF novamente?",
+          ),
         );
         return askCPF(from, sess);
       }
@@ -235,8 +235,8 @@ export async function confirmKnownCPF(
       await sendText(
         from,
         await friendly(
-          "Tive um problema para consultar seu cadastro agora. Pode me enviar o CPF novamente?"
-        )
+          "Tive um problema para consultar seu cadastro agora. Pode me enviar o CPF novamente?",
+        ),
       );
       return askCPF(from, sess);
     }
@@ -249,7 +249,7 @@ export async function confirmKnownCPF(
   await sendText(
     from,
     await friendly(
-      "Se estiver certo, diga *sim*. Se quiser corrigir, diga *corrigir* ou me envie o CPF correto."
-    )
+      "Se estiver certo, diga *sim*. Se quiser corrigir, diga *corrigir* ou me envie o CPF correto.",
+    ),
   );
 }

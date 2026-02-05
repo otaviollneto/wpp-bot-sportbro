@@ -1,4 +1,4 @@
-import { sendText } from "../wa";
+import { sendText } from "../wa.baileys";
 import { Session } from "../type";
 import {
   friendly,
@@ -15,36 +15,36 @@ export async function startForgotPassword(to: string, sess: Session) {
   await sendText(
     to,
     await friendly(
-      "Sem problemas! Para te ajudar com a senha, me confirma o **e-mail do cadastro**, *se não lembrar ou souber* informe seu melhor e-mail."
-    )
+      "Sem problemas! Para te ajudar com a senha, me confirma o **e-mail do cadastro**, *se não lembrar ou souber* informe seu melhor e-mail.",
+    ),
   );
 }
 
 export async function handleEmailConfirm(
   to: string,
   sess: Session,
-  text: string
+  text: string,
 ) {
   const email = text.trim();
   (sess as any).pending = { ...((sess as any).pending || {}), newEmail: email };
   (sess as any).step = "awaiting_email_verification";
   await sendText(
     to,
-    await friendly(`Você informou o e-mail **${email}**. Está correto?`)
+    await friendly(`Você informou o e-mail **${email}**. Está correto?`),
   );
 }
 
 export async function handleEmailVerification(
   to: string,
   sess: Session,
-  text: string
+  text: string,
 ) {
   const ans = norm(text);
   if (isYes(ans)) {
     (sess as any).step = "awaiting_birthdate_confirm";
     await sendText(
       to,
-      "Obrigada! Agora me informe sua **data de nascimento** (ex.: 23/03/1965)."
+      "Obrigada! Agora me informe sua **data de nascimento** (ex.: 23/03/1965).",
     );
     return;
   }
@@ -52,7 +52,7 @@ export async function handleEmailVerification(
     (sess as any).step = "awaiting_email_confirm";
     await sendText(
       to,
-      await friendly("Sem problema! Pode informar o e-mail correto?")
+      await friendly("Sem problema! Pode informar o e-mail correto?"),
     );
     return;
   }
@@ -62,13 +62,13 @@ export async function handleEmailVerification(
 export async function handleBirthdateConfirm(
   to: string,
   sess: Session,
-  text: string
+  text: string,
 ) {
   const iso = toISODate(text);
   if (!iso) {
     await sendText(
       to,
-      await friendly("Consegue me enviar a data no formato **dd/mm/aaaa**?")
+      await friendly("Consegue me enviar a data no formato **dd/mm/aaaa**?"),
     );
     return;
   }
@@ -77,14 +77,14 @@ export async function handleBirthdateConfirm(
   (sess as any).step = "awaiting_birthdate_verification";
   await sendText(
     to,
-    await friendly(`Você informou a data **${br}**. Está correta?`)
+    await friendly(`Você informou a data **${br}**. Está correta?`),
   );
 }
 
 export async function handleBirthdateVerification(
   to: string,
   sess: Session,
-  text: string
+  text: string,
 ) {
   const ans = norm(text);
   if (isYes(ans)) {
@@ -96,8 +96,8 @@ export async function handleBirthdateVerification(
     await sendText(
       to,
       await friendly(
-        "Tudo bem! Me envie novamente sua **data de nascimento** (ex.: 23/03/1965)."
-      )
+        "Tudo bem! Me envie novamente sua **data de nascimento** (ex.: 23/03/1965).",
+      ),
     );
     return;
   }
@@ -127,15 +127,15 @@ export async function finishForgotPassword(to: string, sess: Session) {
       await sendText(
         to,
         await friendly(
-          "Prontinho! Atualizei seus dados e já deixei tudo certo para você recuperar a senha. 💙"
-        )
+          "Prontinho! Atualizei seus dados e já deixei tudo certo para você recuperar a senha. 💙",
+        ),
       );
     } catch {
       await sendText(
         to,
         await friendly(
-          "Tentei atualizar seus dados, mas algo não deu certo agora. Posso te passar o link de recuperação e você tenta por lá?"
-        )
+          "Tentei atualizar seus dados, mas algo não deu certo agora. Posso te passar o link de recuperação e você tenta por lá?",
+        ),
       );
     }
   }
@@ -144,14 +144,14 @@ export async function finishForgotPassword(to: string, sess: Session) {
   await sendText(
     to,
     await friendly(
-      `Aqui está o link para redefinir sua senha com segurança: ${link}\nSe precisar, fico por aqui.`
-    )
+      `Aqui está o link para redefinir sua senha com segurança: ${link}\nSe precisar, fico por aqui.`,
+    ),
   );
 
   // >>> A PARTIR DAQUI: o fluxo cai em `awaiting_more_help`
   (sess as any).step = "awaiting_more_help";
   await sendText(
     to,
-    await friendly("Posso te ajudar em **mais alguma coisa**?")
+    await friendly("Posso te ajudar em **mais alguma coisa**?"),
   );
 }

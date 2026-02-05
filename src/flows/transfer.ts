@@ -6,7 +6,7 @@ import {
   friendly,
   isNo,
 } from "../helpers";
-import { sendText } from "../wa";
+import { sendText } from "../wa.baileys";
 import { askCPF } from "./cpf";
 import { askEvent } from "./events";
 
@@ -57,7 +57,7 @@ export async function performTransferOwnership(params: {
  */
 export async function tryResolveAuthorizationGlobal(
   from: string,
-  text: string
+  text: string,
 ) {
   // aceita "1234 1", "1234 2" ou apenas "1234" (interpreta como autorização)
   const m = (text || "").trim().match(/^(\d{4})(?:\s+([12]))?$/);
@@ -80,13 +80,13 @@ export async function tryResolveAuthorizationGlobal(
     pendingAuth.delete(token);
     await sendText(
       from,
-      await friendly("Este token expirou. Solicite novamente.")
+      await friendly("Este token expirou. Solicite novamente."),
     );
     await sendText(
       auth.requesterPhone,
       await friendly(
-        "A autorização expirou. Você pode solicitar novamente a transferência."
-      )
+        "A autorização expirou. Você pode solicitar novamente a transferência.",
+      ),
     );
     return true;
   }
@@ -97,7 +97,7 @@ export async function tryResolveAuthorizationGlobal(
     await sendText(from, await friendly("Troca de titularidade *negada*."));
     await sendText(
       auth.requesterPhone,
-      await friendly("O titular *negou* a troca de titularidade.")
+      await friendly("O titular *negou* a troca de titularidade."),
     );
     return true;
   }
@@ -113,23 +113,23 @@ export async function tryResolveAuthorizationGlobal(
     pendingAuth.delete(token);
     await sendText(
       from,
-      await friendly("Autorizado. Efetivei a troca de titularidade ✅")
+      await friendly("Autorizado. Efetivei a troca de titularidade ✅"),
     );
     await sendText(
       auth.requesterPhone,
-      await friendly("Prontinho! A troca de titularidade foi concluída ✅")
+      await friendly("Prontinho! A troca de titularidade foi concluída ✅"),
     );
   } catch (e: any) {
     pendingAuth.delete(token);
     await sendText(
       from,
-      await friendly("Não consegui efetivar a troca agora.")
+      await friendly("Não consegui efetivar a troca agora."),
     );
     await sendText(
       auth.requesterPhone,
       await friendly(
-        "Falha ao efetivar a troca agora. Tente novamente em alguns instantes."
-      )
+        "Falha ao efetivar a troca agora. Tente novamente em alguns instantes.",
+      ),
     );
   }
   return true;
@@ -144,7 +144,7 @@ export async function startTransferFlow(to: string, sess: Session) {
   if (!sess.user?.id) {
     await sendText(
       to,
-      await friendly("Antes, preciso confirmar seu CPF/cadastro.")
+      await friendly("Antes, preciso confirmar seu CPF/cadastro."),
     );
     await askCPF(to, sess);
     return;
@@ -162,8 +162,8 @@ export async function startTransferFlow(to: string, sess: Session) {
   await sendText(
     to,
     await friendly(
-      "Você é o **titular atual** da inscrição que deseja transferir?\n\n1. Sim, sou o titular.\n2. Não, estou pedindo em nome do titular."
-    )
+      "Você é o **titular atual** da inscrição que deseja transferir?\n\n1. Sim, sou o titular.\n2. Não, estou pedindo em nome do titular.",
+    ),
   );
   (sess as any).step = "awaiting_holder_role";
   return;

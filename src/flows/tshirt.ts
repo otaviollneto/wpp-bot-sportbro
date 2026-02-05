@@ -1,4 +1,4 @@
-import { sendText } from "../wa";
+import { sendText } from "../wa.baileys";
 import { Session } from "../type";
 import { fetchJSON, friendly, norm } from "../helpers";
 
@@ -10,7 +10,7 @@ export async function askTshirtOptions(to: string, sess: Session) {
     };
     await sendText(
       to,
-      await friendly("Para essa solicitação preciso saber o **evento**.")
+      await friendly("Para essa solicitação preciso saber o **evento**."),
     );
     return;
   }
@@ -35,8 +35,8 @@ export async function askTshirtOptions(to: string, sess: Session) {
       await sendText(
         to,
         await friendly(
-          "Não há tamanhos de camiseta disponíveis no momento para este evento.\n\nO que você prefere?\n1. Falar com atendente\n2. Voltar ao menu"
-        )
+          "Não há tamanhos de camiseta disponíveis no momento para este evento.\n\nO que você prefere?\n1. Falar com atendente\n2. Voltar ao menu",
+        ),
       );
       (sess as any).step = "awaiting_no_tshirt_action";
       return;
@@ -79,8 +79,8 @@ export async function askTshirtOptions(to: string, sess: Session) {
     await sendText(
       to,
       await friendly(
-        "Confira as opções abaixo e selecione o novo tamanho desejado:"
-      )
+        "Confira as opções abaixo e selecione o novo tamanho desejado:",
+      ),
     );
     await sendText(to, menu);
     (sess as any).step = "awaiting_tshirt_choice";
@@ -88,8 +88,8 @@ export async function askTshirtOptions(to: string, sess: Session) {
     await sendText(
       to,
       await friendly(
-        "Não consegui listar os tamanhos agora.\n\nO que você prefere?\n1. Falar com atendente\n2. Voltar ao menu"
-      )
+        "Não consegui listar os tamanhos agora.\n\nO que você prefere?\n1. Falar com atendente\n2. Voltar ao menu",
+      ),
     );
     (sess as any).step = "awaiting_no_tshirt_action";
   }
@@ -98,7 +98,7 @@ export async function askTshirtOptions(to: string, sess: Session) {
 export async function applyTshirtChange(
   to: string,
   sess: Session,
-  tshirtSize: string
+  tshirtSize: string,
 ) {
   if (!sess.user?.id || !sess.event?.id) {
     (sess as any).pending = {
@@ -108,8 +108,8 @@ export async function applyTshirtChange(
     await sendText(
       to,
       await friendly(
-        "Perdi o contexto do evento. Vamos escolhê-lo novamente rapidinho?"
-      )
+        "Perdi o contexto do evento. Vamos escolhê-lo novamente rapidinho?",
+      ),
     );
     return;
   }
@@ -127,20 +127,20 @@ export async function applyTshirtChange(
       await friendly(
         `Beleza! Solicitei a troca do tamanho para **${tshirtSize.toUpperCase()}** no evento **${
           sess.event.title
-        }**. ✅`
-      )
+        }**. ✅`,
+      ),
     );
     (sess as any).step = "awaiting_more_help";
     await sendText(
       to,
-      await friendly("Posso te ajudar em **mais alguma coisa**?")
+      await friendly("Posso te ajudar em **mais alguma coisa**?"),
     );
   } catch {
     await sendText(
       to,
       await friendly(
-        "Não consegui aplicar a troca agora. Vamos tentar novamente?"
-      )
+        "Não consegui aplicar a troca agora. Vamos tentar novamente?",
+      ),
     );
     await askTshirtOptions(to, sess);
   }
@@ -148,7 +148,7 @@ export async function applyTshirtChange(
 
 export function matchTshirtByText(
   raw: string,
-  map: Record<number, { tamanho: string; label: string }>
+  map: Record<number, { tamanho: string; label: string }>,
 ) {
   const list = Object.entries(map).map(([idx, v]) => ({
     idx: Number(idx),

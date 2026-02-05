@@ -1,5 +1,5 @@
 // src/flows/events.ts
-import { sendText } from "../wa";
+import { sendText } from "../wa.baileys";
 import { Session } from "../type";
 import { fetchJSON, friendly, chooseIndexByText } from "../helpers";
 
@@ -11,8 +11,8 @@ export async function askEvent(to: string, sess: Session): Promise<void> {
     await sendText(
       to,
       await friendly(
-        "No momento não encontrei eventos abertos. Se quiser, posso te avisar quando abrirem novas inscrições."
-      )
+        "No momento não encontrei eventos abertos. Se quiser, posso te avisar quando abrirem novas inscrições.",
+      ),
     );
     return;
   }
@@ -28,7 +28,7 @@ export async function askEvent(to: string, sess: Session): Promise<void> {
 
   await sendText(
     to,
-    await friendly("Legal! Em qual **evento** você quer atendimento?")
+    await friendly("Legal! Em qual **evento** você quer atendimento?"),
   );
   await sendText(to, menu);
 
@@ -37,7 +37,7 @@ export async function askEvent(to: string, sess: Session): Promise<void> {
 
 export const selectEventByIndexOrAI = async (
   raw: string,
-  lista: any[]
+  lista: any[],
 ): Promise<number> => {
   const asNum = Number(raw);
   if (Number.isInteger(asNum) && asNum >= 1 && asNum <= lista.length)

@@ -1,5 +1,5 @@
 // src/flows/category.ts
-import { sendText } from "../wa";
+import { sendText } from "../wa.baileys";
 import { Session } from "../type";
 import { fetchJSON, friendly, norm, chooseIndexByText } from "../helpers";
 
@@ -7,7 +7,7 @@ export async function askCategoryOptions(to: string, sess: Session) {
   if (!sess.event?.id || !sess.user?.id) {
     await sendText(
       to,
-      await friendly("Antes, preciso do **evento** e do seu cadastro.")
+      await friendly("Antes, preciso do **evento** e do seu cadastro."),
     );
     return;
   }
@@ -16,7 +16,7 @@ export async function askCategoryOptions(to: string, sess: Session) {
     const url = `${
       process.env.API
     }/event_category_list.php?id=${encodeURIComponent(
-      String(sess.event.id)
+      String(sess.event.id),
     )}&userID=${encodeURIComponent(String(sess.user.id))}&status=1`;
 
     const data = await fetchJSON(url);
@@ -28,8 +28,8 @@ export async function askCategoryOptions(to: string, sess: Session) {
       await sendText(
         to,
         await friendly(
-          "Não encontrei opções de categoria disponíveis para este evento.\n\nO que você prefere?\n1. Falar com atendente\n2. Voltar ao menu"
-        )
+          "Não encontrei opções de categoria disponíveis para este evento.\n\nO que você prefere?\n1. Falar com atendente\n2. Voltar ao menu",
+        ),
       );
       (sess as any).step = "awaiting_no_category_action";
       return;
@@ -51,8 +51,8 @@ export async function askCategoryOptions(to: string, sess: Session) {
     await sendText(
       to,
       await friendly(
-        "Estas são as categorias disponíveis. Selecione a opção desejada:"
-      )
+        "Estas são as categorias disponíveis. Selecione a opção desejada:",
+      ),
     );
     await sendText(to, menu);
     (sess as any).step = "awaiting_category_choice";
@@ -60,8 +60,8 @@ export async function askCategoryOptions(to: string, sess: Session) {
     await sendText(
       to,
       await friendly(
-        "Não consegui listar as categorias agora.\n\nO que você prefere?\n1. Falar com atendente\n2. Voltar ao menu"
-      )
+        "Não consegui listar as categorias agora.\n\nO que você prefere?\n1. Falar com atendente\n2. Voltar ao menu",
+      ),
     );
     (sess as any).step = "awaiting_no_category_action";
   }
@@ -70,14 +70,14 @@ export async function askCategoryOptions(to: string, sess: Session) {
 export async function applyCategoryChange(
   to: string,
   sess: Session,
-  inscricaoID: string
+  inscricaoID: string,
 ) {
   if (!sess.user?.id || !sess.event?.id) {
     await sendText(
       to,
       await friendly(
-        "Parece que perdi o contexto do evento. Vamos tentar de novo?"
-      )
+        "Parece que perdi o contexto do evento. Vamos tentar de novo?",
+      ),
     );
     return;
   }
@@ -93,20 +93,20 @@ export async function applyCategoryChange(
     await sendText(
       to,
       await friendly(
-        `Prontinho! Solicitei a **troca de categoria** no evento **${sess.event.title}**. 🎉`
-      )
+        `Prontinho! Solicitei a **troca de categoria** no evento **${sess.event.title}**. 🎉`,
+      ),
     );
     (sess as any).step = "awaiting_more_help";
     await sendText(
       to,
-      await friendly("Posso te ajudar em **mais alguma coisa**?")
+      await friendly("Posso te ajudar em **mais alguma coisa**?"),
     );
   } catch {
     await sendText(
       to,
       await friendly(
-        "Algo não deu certo ao solicitar a troca. Vamos repetir o processo?"
-      )
+        "Algo não deu certo ao solicitar a troca. Vamos repetir o processo?",
+      ),
     );
     await askCategoryOptions(to, sess);
   }
@@ -114,7 +114,7 @@ export async function applyCategoryChange(
 
 export async function handleCategoryFreeText(
   raw: string,
-  lista: any[]
+  lista: any[],
 ): Promise<number> {
   const q = norm(raw);
   if (!q || !lista?.length) return -1;
@@ -127,7 +127,7 @@ export async function handleCategoryFreeText(
         c.descricao || "",
         c.valor_formatado ? `R$ ${c.valor_formatado}` : "",
         c.taxa_formatado ? `taxa R$ ${c.taxa_formatado}` : "",
-      ].join(" ")
+      ].join(" "),
     );
     return tokens.every((tk) => hay.includes(tk));
   });

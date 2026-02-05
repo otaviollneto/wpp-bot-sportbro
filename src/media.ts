@@ -1,10 +1,10 @@
 import { generatePix } from "./pix";
-import { sendImageBase64, sendText } from "./wa";
+import { sendImageBase64, sendText } from "./wa.baileys";
 
 export async function sendPix(
   toE164: string,
   amount: number,
-  description?: string
+  description?: string,
 ) {
   const { payload, dataUrl } = await generatePix({
     key: process.env.PIX_KEY!,

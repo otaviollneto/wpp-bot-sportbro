@@ -1,4 +1,4 @@
-import { sendText } from "../wa";
+import { sendText } from "../wa.baileys";
 import { Session } from "../type";
 import { friendly } from "../helpers";
 
@@ -10,12 +10,12 @@ export async function askTeamName(to: string, sess: Session) {
     };
     await sendText(
       to,
-      await friendly("Para essa solicitação preciso saber o **evento**.")
+      await friendly("Para essa solicitação preciso saber o **evento**."),
     );
     return;
   }
   const msg = await friendly(
-    `Evento selecionado: **${sess.event.title}**\nAntes de confirmar, me informe o **nome da equipe** como deve aparecer.`
+    `Evento selecionado: **${sess.event.title}**\nAntes de confirmar, me informe o **nome da equipe** como deve aparecer.`,
   );
   await sendText(to, msg);
   (sess as any).step = "awaiting_team_name";
@@ -26,7 +26,7 @@ export async function confirmTeamName(to: string, sess: Session, team: string) {
   const msg = await friendly(
     `Você informou **${team}** como nome da equipe no evento **${
       sess.event?.title || ""
-    }**. Está correto?`
+    }**. Está correto?`,
   );
   await sendText(to, msg);
   (sess as any).step = "awaiting_team_confirm";
@@ -41,8 +41,8 @@ export async function applyTeamChange(to: string, sess: Session) {
     await sendText(
       to,
       await friendly(
-        "Preciso do **evento** e do seu cadastro. Vamos escolher o evento?"
-      )
+        "Preciso do **evento** e do seu cadastro. Vamos escolher o evento?",
+      ),
     );
     return;
   }
@@ -68,20 +68,20 @@ export async function applyTeamChange(to: string, sess: Session) {
     await sendText(
       to,
       await friendly(
-        `Perfeito! Atualizei o **nome da equipe** para **${teamName}** no evento **${sess.event.title}**. ✅`
-      )
+        `Perfeito! Atualizei o **nome da equipe** para **${teamName}** no evento **${sess.event.title}**. ✅`,
+      ),
     );
     (sess as any).step = "awaiting_more_help";
     await sendText(
       to,
-      await friendly("Posso te ajudar em **mais alguma coisa**?")
+      await friendly("Posso te ajudar em **mais alguma coisa**?"),
     );
   } catch {
     await sendText(
       to,
       await friendly(
-        "Não consegui salvar o nome da equipe agora. Quer tentar novamente me enviando o nome outra vez?"
-      )
+        "Não consegui salvar o nome da equipe agora. Quer tentar novamente me enviando o nome outra vez?",
+      ),
     );
     await askTeamName(to, sess);
   }
