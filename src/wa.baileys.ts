@@ -45,7 +45,7 @@ function isBaileysJid(to: string) {
   // individual: 55...@s.whatsapp.net
   // group: ...@g.us
   // broadcast: ...@broadcast
-  return /@(s\.whatsapp\.net|g\.us|broadcast)$/i.test(to || "");
+  return /@(s\.whatsapp\.net|g\.us|broadcast|lid)$/i.test(to || "");
 }
 
 function normalizePhoneToDigits(to: string) {
@@ -67,7 +67,9 @@ function normalizePhoneToDigits(to: string) {
 
 async function ensureJid(to: string) {
   if (!to) throw new Error("Destino não informado");
-  if (isBaileysJid(to)) return to;
+
+  // ✅ se já é JID, manda do jeito que veio (inclui @lid)
+  if (/@(s\.whatsapp\.net|g\.us|broadcast|lid)$/i.test(to)) return to;
 
   const digits = normalizePhoneToDigits(to);
   if (!digits) throw new Error("Número não informado");
@@ -75,12 +77,12 @@ async function ensureJid(to: string) {
 
   const candidate = `${digits}@s.whatsapp.net`;
 
-  const result = await sock.onWhatsApp(candidate);
-  const [check] = result || [];
+  const [check] = (await sock.onWhatsApp(candidate)) || [];
   if (!check?.exists) throw new Error("Número não possui WhatsApp");
 
-  return check.jid; // use o jid que o WhatsApp devolver
+  return check.jid;
 }
+
 /** =========================
  *  Inicialização / Reconexão
  *  ========================= */
