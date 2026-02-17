@@ -37,7 +37,7 @@ export function norm(s: string) {
 }
 
 export async function classifyIssue(
-  text: string
+  text: string,
 ): Promise<
   | "iss_pwd"
   | "iss_cat"
@@ -50,11 +50,11 @@ export async function classifyIssue(
 > {
   const prompt = `
 Classifique a solicitação do usuário em UMA destas chaves:
-- iss_pwd (esqueci a senha, recuperar senha, redefinir)
-- iss_cat (troca de categoria)
+- iss_pwd (esqueci a senha, recuperar senha, redefinir, esqueci, senha)
+- iss_cat (troca de categoria, categoria)
 - iss_size (troca de tamanho de camiseta)
 - iss_team (troca de nome da equipe, equipe)
-- iss_cancel (cancelar inscrição, estorno)
+- iss_cancel (cancelar inscrição, estorno, cancelamento, cancelar)
 - choose_event (quando ele quer escolher/alterar evento)
 - iss_transfer (transferir inscrição para outro titular)
 Responda apenas com a chave. Texto: "${text}"
@@ -143,21 +143,21 @@ export function isGoMenu(s: string) {
 export function isPoliteEnd(s: string) {
   const t = norm(` ${s} `);
   return [
-    " obrigado ",
-    " obrigada ",
-    " valeu ",
-    " agradeco ",
-    " agradeço ",
-    " perfeito ",
-    " deu certo ",
-    " resolveu ",
-    " tudo certo ",
-    " ok ",
-    " tranquilo ",
-    " blz ",
-    " beleza ",
-    " fechou ",
-    " show ",
+    "obrigado",
+    "obrigada",
+    "valeu",
+    "agradeco",
+    "agradeço",
+    "perfeito",
+    "deu certo",
+    "resolveu",
+    "tudo certo",
+    "ok",
+    "tranquilo",
+    "blz",
+    "beleza",
+    "fechou",
+    "show",
   ].some((k) => t.includes(k));
 }
 
@@ -166,24 +166,24 @@ export function wantsMoreHelp(s: string) {
   const t = norm(` ${s} `);
   return (
     [
-      " sim ",
-      " quero ajuda ",
-      " preciso de ajuda ",
-      " suporte ",
-      " atendente ",
-      " falar com humano ",
-      " falar com atendente ",
-      " menu ",
-      " mais uma coisa ",
-      " tem mais uma ",
-      " tenho outra ",
-      " outra duvida ",
-      " outra dúvida ",
-      " duvida ",
-      " dúvida ",
-      " ajuda ",
-      " pode me ajudar ",
-      " mais ajuda ",
+      "sim",
+      "quero ajuda",
+      "preciso de ajuda",
+      "suporte",
+      "atendente",
+      "falar com humano",
+      "falar com atendente",
+      "menu",
+      "mais uma coisa",
+      "tem mais uma",
+      "tenho outra",
+      "outra duvida",
+      "outra dúvida",
+      "duvida",
+      "dúvida",
+      "ajuda",
+      "pode me ajudar",
+      "mais ajuda",
     ].some((k) => t.includes(k)) || t.trim() === "1"
   );
 }
@@ -241,14 +241,14 @@ export function isFixCPF(s: string) {
   const t = norm(` ${s} `);
   return (
     [
-      " corrigir ",
-      " corrigir cpf ",
-      " errei ",
-      " errado ",
-      " trocar cpf ",
-      " alterar cpf ",
-      " arrumar cpf ",
-      " ajustar cpf ",
+      "corrigir",
+      "corrigir cpf",
+      "errei",
+      "errado",
+      "trocar cpf",
+      "alterar cpf",
+      "arrumar cpf",
+      "ajustar cpf",
     ].some((k) => t.includes(k)) || t.trim() === "1"
   );
 }
@@ -257,13 +257,13 @@ export function isCreateAccount(s: string) {
   const t = norm(` ${s} `);
   return (
     [
-      " cadastro ",
-      " cadastrar ",
-      " criar conta ",
-      " fazer conta ",
-      " registrar ",
-      " fazer cadastro ",
-      " novo cadastro ",
+      "cadastro",
+      "cadastrar",
+      "criar conta",
+      "fazer conta",
+      "registrar",
+      "fazer cadastro",
+      "novo cadastro",
     ].some((k) => t.includes(k)) || t.trim() === "2"
   );
 }
@@ -362,7 +362,7 @@ export const friendly = async (text: string) => {
 
 export function clearEventContext(
   sess: Session,
-  opts?: { keepDesired?: boolean }
+  opts?: { keepDesired?: boolean },
 ) {
   if (sess.event) delete (sess as any).event;
 
@@ -412,7 +412,7 @@ export function phonesMatch(a: string, b: string) {
 export function chooseIndexByText<T>(
   queryRaw: string,
   list: T[],
-  getLabel: (item: T) => string
+  getLabel: (item: T) => string,
 ): number {
   const query = norm(queryRaw);
   if (!query || !list?.length) return -1;

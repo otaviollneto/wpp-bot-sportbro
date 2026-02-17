@@ -51,10 +51,17 @@ function isBaileysJid(to: string) {
 function normalizePhoneToDigits(to: string) {
   let digits = (to || "").replace(/\D/g, "");
   if (!digits) return "";
-  // se vier 11 dígitos (DDD+9), prefixa 55
-  if (digits.length === 11) digits = "55" + digits;
-  // se não tiver 55, prefixa 55
-  if (!digits.startsWith("55")) digits = "55" + digits;
+
+  // se já veio com DDI (12+ dígitos), não mexe
+  if (digits.length >= 12) return digits;
+
+  // se veio com 10/11 dígitos, assume BR e prefixa 55
+  if (digits.length === 10 || digits.length === 11) {
+    if (!digits.startsWith("55")) digits = "55" + digits;
+    return digits;
+  }
+
+  // fallback: retorna como está e deixa o onWhatsApp validar
   return digits;
 }
 
@@ -64,11 +71,16 @@ async function ensureJid(to: string) {
 
   const digits = normalizePhoneToDigits(to);
   if (!digits) throw new Error("Número não informado");
+  if (!sock) throw new Error("Socket não inicializado");
 
-  // Baileys usa @s.whatsapp.net para chat individual
-  return `${digits}@s.whatsapp.net`;
+  const candidate = `${digits}@s.whatsapp.net`;
+
+  const result = await sock.onWhatsApp(candidate);
+  const [check] = result || [];
+  if (!check?.exists) throw new Error("Número não possui WhatsApp");
+
+  return check.jid; // use o jid que o WhatsApp devolver
 }
-
 /** =========================
  *  Inicialização / Reconexão
  *  ========================= */
@@ -236,12 +248,15 @@ export type BaileysIncomingMessage = {
 export type OnMessageHandler = (msg: BaileysIncomingMessage) => void;
 
 export function onMessage(handler: OnMessageHandler) {
+  console.log("[WA] registrando handler de mensagens...");
   if (!sock) {
     // registra “depois”; você chamou onMessage antes do initWA no server.ts
     // então guardamos o handler e registramos quando o socket existir
     pendingHandlers.push(handler);
+
     return;
   }
+
   registerMessageHandler(handler);
 }
 
@@ -284,6 +299,15 @@ function registerMessageHandler(handler: OnMessageHandler) {
           pushName: m.pushName || undefined,
           raw: m,
         };
+
+        console.log("[WA] mensagem recebida:", {
+          id: incoming.id,
+          from: incoming.from,
+          isGroup: incoming.isGroup,
+          participant: incoming.participant,
+          pushName: incoming.pushName,
+          body: incoming.body,
+        });
 
         handler(incoming);
       } catch (e) {
